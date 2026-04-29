@@ -10,11 +10,11 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="BCC Alert for Outlook" />
   <Description DefaultValue="Warn before sending to multiple visible recipients (To/Cc)." />
-  <IconUrl DefaultValue="https://localhost:3000/assets/icon-64.png" />
-  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-128.png" />
-  <SupportUrl DefaultValue="https://localhost:3000/support" />
+  <IconUrl DefaultValue="__ICON_URL__" />
+  <HighResolutionIconUrl DefaultValue="__HIGH_ICON_URL__" />
+  <SupportUrl DefaultValue="__SUPPORT_URL__" />
   <AppDomains>
-    <AppDomain>https://localhost:3000</AppDomain>
+    <AppDomain>__APP_DOMAIN__</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Mailbox" />
@@ -27,7 +27,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://localhost:3000/src/commands.html" />
+        <SourceLocation DefaultValue="__BASE_URL__/src/commands.html" />
         <RequestedHeight>250</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -62,7 +62,7 @@
       </Hosts>
       <Resources>
         <bt:Urls>
-          <bt:Url id="Commands.Url" DefaultValue="https://localhost:3000/src/commands.html" />
+          <bt:Url id="Commands.Url" DefaultValue="__BASE_URL__/src/commands.html" />
         </bt:Urls>
       </Resources>
     </VersionOverrides>

@@ -5,16 +5,16 @@
   xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.1"
   xsi:type="MailApp">
   <Id>2c3f9fbc-8a03-4bd8-a7a6-afb1c1cfeada</Id>
-  <Version>1.0.0.1</Version>
+  <Version>1.0.0.2</Version>
   <ProviderName>BCC Alert</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="BCC Alert for Outlook" />
-  <Description DefaultValue="Warn before sending to multiple visible recipients (To/Cc)." />
-  <IconUrl DefaultValue="https://localhost:3000/assets/icon-64.png" />
-  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-128.png" />
-  <SupportUrl DefaultValue="https://localhost:3000/support" />
+  <DisplayName DefaultValue="BCC Alert Probe" />
+  <Description DefaultValue="Probe manifest for OnMessageSend deployment." />
+  <IconUrl DefaultValue="https://erlix.net/bcc-alert/addin/assets/icon-64.png" />
+  <HighResolutionIconUrl DefaultValue="https://erlix.net/bcc-alert/addin/assets/icon-128.png" />
+  <SupportUrl DefaultValue="https://erlix.net/bcc-alert/addin/support/" />
   <AppDomains>
-    <AppDomain>https://localhost:3000</AppDomain>
+    <AppDomain>https://erlix.net</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Mailbox" />
@@ -27,7 +27,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://localhost:3000/src/commands.html" />
+        <SourceLocation DefaultValue="https://erlix.net/bcc-alert/addin/src/commands.html" />
         <RequestedHeight>250</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -53,7 +53,7 @@
             <FunctionFile resid="Commands.Url" />
             <ExtensionPoint xsi:type="LaunchEvent">
               <LaunchEvents>
-                <LaunchEvent Type="OnMessageSend" FunctionName="onMessageSendHandler" SendMode="PromptUser" />
+                <LaunchEvent Type="OnMessageSend" FunctionName="onMessageSendHandler" />
               </LaunchEvents>
               <SourceLocation resid="Commands.Url" />
             </ExtensionPoint>
@@ -62,7 +62,7 @@
       </Hosts>
       <Resources>
         <bt:Urls>
-          <bt:Url id="Commands.Url" DefaultValue="https://localhost:3000/src/commands.html" />
+          <bt:Url id="Commands.Url" DefaultValue="https://erlix.net/bcc-alert/addin/src/commands.html" />
         </bt:Urls>
       </Resources>
     </VersionOverrides>

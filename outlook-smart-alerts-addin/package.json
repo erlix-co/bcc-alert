@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check src/launchevent.js"
+    "check": "node --check src/launchevent.js",
+    "simulate": "node tools/simulate-smart-alerts.js",
+    "hosting:build": "node tools/build-hosting-bundle.js",
+    "manifest:build": "node tools/build-manifest.js",
+    "manifest:validate": "npx office-addin-manifest validate manifest.production.xml"
   },
   "keywords": [],
   "author": "",

@@ -1,0 +1,33 @@
+Hello Microsoft Support,
+
+Thank you for the guidance.
+
+Request number: 2604290050004201
+
+Requested details:
+
+1) Exact error shown
+- Integrated apps upload fails with: "Invalid manifest file"
+
+2) Manifest type
+- Add-in-only Outlook manifest (XML), not unified Microsoft 365 manifest.
+
+3) LaunchEvent snippet (from the failing production manifest)
+<LaunchEvent Type="OnMessageSend" FunctionName="onMessageSendHandler" SendMode="PromptUser" />
+
+4) What we validated
+- Runtime URLs are public HTTPS and return 200:
+  - https://erlix.net/bcc-alert/addin/src/commands.html
+  - https://erlix.net/bcc-alert/addin/src/launchevent.js
+  - https://erlix.net/bcc-alert/addin/assets/icon-64.png
+  - https://erlix.net/bcc-alert/addin/assets/icon-128.png
+  - https://erlix.net/bcc-alert/addin/support/
+- Manifest validates successfully with office-addin-manifest validator.
+- OwaMailboxPolicy OnSendAddinsEnabled is True.
+- Diagnostic manifest without OnMessageSend uploads successfully.
+- Any manifest with OnMessageSend (LaunchEvent) is rejected as invalid.
+
+Please verify tenant/service-side enablement for event-based add-ins / Smart Alerts OnMessageSend and advise exact prerequisite missing for this tenant.
+
+Regards,
+Israel Erlich

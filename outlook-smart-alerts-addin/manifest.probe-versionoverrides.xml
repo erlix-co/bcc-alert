@@ -4,37 +4,37 @@
   xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
   xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.1"
   xsi:type="MailApp">
-  <Id>2c3f9fbc-8a03-4bd8-a7a6-afb1c1cfeada</Id>
-  <Version>1.0.0.1</Version>
+  <Id>7ae5653a-2e12-47ec-adf8-c7ab8fd4731c</Id>
+  <Version>1.0.0.0</Version>
   <ProviderName>BCC Alert</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="BCC Alert for Outlook" />
-  <Description DefaultValue="Warn before sending to multiple visible recipients (To/Cc)." />
-  <IconUrl DefaultValue="https://localhost:3000/assets/icon-64.png" />
-  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-128.png" />
-  <SupportUrl DefaultValue="https://localhost:3000/support" />
+  <DisplayName DefaultValue="BCC Alert Probe VO" />
+  <Description DefaultValue="Probe manifest with VersionOverrides only." />
+  <IconUrl DefaultValue="https://erlix.net/bcc-alert/addin/assets/icon-64.png" />
+  <HighResolutionIconUrl DefaultValue="https://erlix.net/bcc-alert/addin/assets/icon-128.png" />
+  <SupportUrl DefaultValue="https://erlix.net/bcc-alert/addin/support/" />
   <AppDomains>
-    <AppDomain>https://localhost:3000</AppDomain>
+    <AppDomain>https://erlix.net</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Mailbox" />
   </Hosts>
   <Requirements>
     <Sets>
-      <Set Name="Mailbox" MinVersion="1.12" />
+      <Set Name="Mailbox" MinVersion="1.5" />
     </Sets>
   </Requirements>
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://localhost:3000/src/commands.html" />
+        <SourceLocation DefaultValue="https://erlix.net/bcc-alert/addin/src/commands.html" />
         <RequestedHeight>250</RequestedHeight>
       </DesktopSettings>
     </Form>
   </FormSettings>
   <Permissions>ReadWriteItem</Permissions>
   <Rule xsi:type="RuleCollection" Mode="Or">
-    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit" />
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read" />
   </Rule>
   <DisableEntityHighlighting>false</DisableEntityHighlighting>
 
@@ -43,7 +43,7 @@
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1"
       xsi:type="VersionOverridesV1_1">
       <Requirements>
-        <bt:Sets DefaultMinVersion="1.12">
+        <bt:Sets DefaultMinVersion="1.5">
           <bt:Set Name="Mailbox" />
         </bt:Sets>
       </Requirements>
@@ -51,18 +51,12 @@
         <Host xsi:type="MailHost">
           <DesktopFormFactor>
             <FunctionFile resid="Commands.Url" />
-            <ExtensionPoint xsi:type="LaunchEvent">
-              <LaunchEvents>
-                <LaunchEvent Type="OnMessageSend" FunctionName="onMessageSendHandler" SendMode="PromptUser" />
-              </LaunchEvents>
-              <SourceLocation resid="Commands.Url" />
-            </ExtensionPoint>
           </DesktopFormFactor>
         </Host>
       </Hosts>
       <Resources>
         <bt:Urls>
-          <bt:Url id="Commands.Url" DefaultValue="https://localhost:3000/src/commands.html" />
+          <bt:Url id="Commands.Url" DefaultValue="https://erlix.net/bcc-alert/addin/src/commands.html" />
         </bt:Urls>
       </Resources>
     </VersionOverrides>

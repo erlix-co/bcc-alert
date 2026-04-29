@@ -31,6 +31,51 @@ This project is a separate Outlook implementation of BCC Alert using Office Add-
 2. Run `npm start`.
 3. Keep the process running while testing in Outlook.
 
+## Clean project separation
+
+This Outlook add-in stays fully inside this project:
+- `C:\Users\טאטי\Projects\BCC-Alert\outlook-smart-alerts-addin`
+
+Do not place add-in runtime files under `LinkCheck`.
+
+## Build hosting bundle
+
+Generate deploy-ready static files from this project only:
+
+- `npm run hosting:build`
+
+Output folder:
+- `hosting/bcc-alert/addin`
+
+You can upload this folder to your server path:
+- `https://erlix.net/bcc-alert/addin`
+
+This keeps your homepage `https://erlix.net/bcc-alert/` separate.
+
+## Build a production manifest (non-localhost)
+
+`Integrated apps` deployment rejects localhost URLs. Generate a production manifest with your public HTTPS base URL:
+
+1. Host this add-in content under your domain (must include `/src/*` and `/assets/*`).
+2. Build manifest:
+   - PowerShell:
+     - `$env:BASE_URL="https://your-domain/path"`
+     - `npm run manifest:build`
+3. Validate manifest:
+   - `npm run manifest:validate`
+4. Upload `manifest.production.xml` in Microsoft 365 admin center (`Integrated apps`).
+
+Notes:
+- `BASE_URL` must be HTTPS and publicly reachable by Microsoft 365 clients.
+- Optional overrides:
+  - `ICON_URL` (default: `${origin}/linkcheck/logo.png`)
+  - `HIGH_ICON_URL` (default: `ICON_URL`)
+  - `SUPPORT_URL` (default: `${BASE_URL}/support/`)
+- Runtime telemetry posts to `/api/metrics` on the same host origin.
+
+Recommended value for this project:
+- `BASE_URL=https://erlix.net/bcc-alert/addin`
+
 ## Sideload in Outlook on the web
 
 1. Open Outlook on the web.
