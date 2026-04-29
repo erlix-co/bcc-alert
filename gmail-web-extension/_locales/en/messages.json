@@ -1,0 +1,34 @@
+{
+  "extName": {
+    "message": "Visible Recipients Guard"
+  },
+  "warningTitle": {
+    "message": "Attention!"
+  },
+  "warningBody": {
+    "message": "You are sending to multiple recipients in visible fields. Consider using Bcc."
+  },
+  "blockedSoFar": {
+    "message": "So far, this tool has helped prevent visible multi-recipient sends $COUNT$ times.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "backButton": {
+    "message": "Back"
+  },
+  "sendAnywayButton": {
+    "message": "Send anyway"
+  },
+  "popupTitle": {
+    "message": "Efficiency Snapshot"
+  },
+  "popupCounterLabel": {
+    "message": "Blocked risky sends"
+  },
+  "popupResetButton": {
+    "message": "Reset counter"
+  }
+}

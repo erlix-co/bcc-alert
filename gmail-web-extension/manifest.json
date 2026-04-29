@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Visible Recipients Guard",
+  "description": "Warns before sending an email to multiple visible recipients (To/Cc).",
+  "version": "0.1.0",
+  "default_locale": "en",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://outlook.office.com/*",
+    "https://outlook.live.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mail.google.com/*",
+        "https://outlook.office.com/*",
+        "https://outlook.live.com/*"
+      ],
+      "js": ["src/content.js"],
+      "css": ["src/styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "__MSG_extName__",
+    "default_popup": "src/popup.html"
+  }
+}
