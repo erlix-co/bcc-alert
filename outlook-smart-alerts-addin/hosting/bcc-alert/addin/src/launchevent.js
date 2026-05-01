@@ -9,6 +9,15 @@ const BLOCK_MESSAGES = {
   en: "You are sending to multiple visible recipients. Consider using Bcc."
 };
 
+const GROUP_HINT_PATTERN =
+  /(group|list|distribution|distlist|dl|all[-_.]?|everyone|team|staff|dept|department|broadcast|members|alias|mailing|קבוצה|תפוצה|צוות|מחלקה|כולם|רשימה)/i;
+
+const GROUP_ALIAS_PREFIX_PATTERN =
+  /^(all|team|staff|group|groups|dl|dist|list|members|dept|department|office|broadcast|announce|news|everyone)([-_.]|$)/i;
+
+const GROUP_ALIAS_SUFFIX_PATTERN =
+  /([-_.])(all|team|staff|group|groups|dl|dist|list|members|dept|department|office|broadcast|announce|news|everyone)$/i;
+
 function getRecipientsAsync(field) {
   return new Promise((resolve) => {
     field.getAsync((result) => {
@@ -30,6 +39,95 @@ function countVisibleRecipients(item) {
         if (key) seen.add(key);
       });
       return seen.size;
+    }
+  );
+}
+
+function isLikelyGroupRecipient(recipient) {
+  return getGroupSignalReason(recipient) !== null;
+}
+
+function getEmailLocalPart(email) {
+  if (!email || !email.includes("@")) return "";
+  return email.split("@")[0].trim();
+}
+
+function normalizedString(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getGroupSignalReason(recipient) {
+  const email = normalizedString(recipient?.emailAddress);
+  const displayName = normalizedString(recipient?.displayName);
+  const routingType = normalizedString(recipient?.routingType);
+  const mailboxType = normalizedString(recipient?.mailboxType || recipient?.recipientType || recipient?.type);
+  const raw = `${email} ${displayName}`.trim();
+
+  if (!raw) return null;
+
+  // Strong signal: recipient object already indicates group/list type.
+  if (mailboxType && /(group|distribution|dl|list)/i.test(mailboxType)) {
+    return "mailbox_type";
+  }
+
+  // Strong signal: common Exchange routing type for groups.
+  if (routingType && /(ex|x500|x400)/i.test(routingType) && GROUP_HINT_PATTERN.test(raw)) {
+    return "routing_and_name";
+  }
+
+  // Medium signal: explicit group/list keywords in alias/display.
+  if (GROUP_HINT_PATTERN.test(raw)) {
+    return "keyword";
+  }
+
+  const alias = getEmailLocalPart(email);
+  if (!alias) return null;
+
+  // Medium signal: known alias conventions used for distribution lists.
+  if (GROUP_ALIAS_PREFIX_PATTERN.test(alias) || GROUP_ALIAS_SUFFIX_PATTERN.test(alias)) {
+    return "alias_pattern";
+  }
+
+  // Soft signal: non-personal alias with separators and numeric audience hints.
+  const hasSeparator = /[-_.]/.test(alias);
+  const hasAudienceToken = /(all|team|staff|dept|office|sales|support|ops|hr|finance|it|security|everyone)/i.test(
+    alias
+  );
+  if (hasSeparator && hasAudienceToken) {
+    return "audience_alias";
+  }
+
+  return null;
+}
+
+function assessVisibleRecipients(item) {
+  return Promise.all([getRecipientsAsync(item.to), getRecipientsAsync(item.cc)]).then(
+    ([toRecipients, ccRecipients]) => {
+      const visibleRecipients = [...toRecipients, ...ccRecipients];
+      const seen = new Set();
+      let hasLikelyGroup = false;
+      const groupSignalReasons = [];
+
+      visibleRecipients.forEach((recipient) => {
+        const key = (recipient?.emailAddress || recipient?.displayName || "").trim().toLowerCase();
+        if (key) seen.add(key);
+        const reason = getGroupSignalReason(recipient);
+        if (reason) {
+          hasLikelyGroup = true;
+          groupSignalReasons.push(reason);
+        }
+      });
+
+      const uniqueVisibleCount = seen.size;
+      const effectiveVisibleCount =
+        hasLikelyGroup && uniqueVisibleCount <= 1 ? 2 : uniqueVisibleCount;
+
+      return {
+        uniqueVisibleCount,
+        effectiveVisibleCount,
+        hasLikelyGroup,
+        groupSignalReasons
+      };
     }
   );
 }
@@ -98,16 +196,16 @@ function onMessageSendHandler(event) {
   }
 
   const item = Office.context.mailbox.item;
-  countVisibleRecipients(item).then((visibleCount) => {
-    if (visibleCount > POLICY.maxVisibleRecipients) {
-      reportDecisionMetric({ decision: "blocked", visibleCount });
+  assessVisibleRecipients(item).then(({ effectiveVisibleCount }) => {
+    if (effectiveVisibleCount > POLICY.maxVisibleRecipients) {
+      reportDecisionMetric({ decision: "blocked", visibleCount: effectiveVisibleCount });
       event.completed({
         allowEvent: false,
         errorMessage: BLOCK_MESSAGES[getUserLanguage()]
       });
       return;
     }
-    reportDecisionMetric({ decision: "allowed", visibleCount });
+    reportDecisionMetric({ decision: "allowed", visibleCount: effectiveVisibleCount });
     event.completed({ allowEvent: true });
   });
 }
@@ -122,6 +220,9 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     getRecipientsAsync,
     countVisibleRecipients,
+    getGroupSignalReason,
+    isLikelyGroupRecipient,
+    assessVisibleRecipients,
     getUserLanguage,
     isMailboxRequirementSupported,
     toRecipientBucket,

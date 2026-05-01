@@ -74,6 +74,18 @@ async function main() {
     bcc: [{ emailAddress: "hidden@example.com" }]
   });
 
+  await runScenario("תרחיש 4 - קבוצת תפוצה כנמען יחיד", {
+    to: [{ emailAddress: "all-staff@example.com", displayName: "All Staff" }],
+    cc: [],
+    bcc: []
+  });
+
+  await runScenario("תרחיש 5 - אליאס מחלקתי כנמען יחיד", {
+    to: [{ emailAddress: "finance_team@example.com", displayName: "Finance Team" }],
+    cc: [],
+    bcc: []
+  });
+
   // Allow fire-and-forget telemetry requests to finish before process exits.
   await new Promise((resolve) => setTimeout(resolve, 500));
 }
