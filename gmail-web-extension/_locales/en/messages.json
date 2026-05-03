@@ -23,12 +23,18 @@
     "message": "Send anyway"
   },
   "popupTitle": {
-    "message": "Efficiency Snapshot"
+    "message": "Attention!"
   },
-  "popupCounterLabel": {
-    "message": "Blocked risky sends"
+  "popupStatsBefore": {
+    "message": "So far, you have been protected from "
+  },
+  "popupStatsAfter": {
+    "message": " risky visible multi-recipient sends."
   },
   "popupResetButton": {
     "message": "Reset counter"
+  },
+  "popupDebugLabel": {
+    "message": "Log [VRG] lines in Gmail tab console (DevTools)"
   }
 }

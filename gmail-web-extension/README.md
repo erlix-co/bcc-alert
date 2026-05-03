@@ -1,10 +1,13 @@
 # Visible Recipients Guard (Web-First MVP)
 
-Browser extension MVP for Gmail Web and Outlook Web.
+Chrome extension for **Gmail in the browser** (personal Gmail and **Google Workspace** — same `mail.google.com` UI).
+
+> **Google Workspace packaging:** use this folder as the single source of truth. The duplicate `google-workspace-extension` folder was removed; deploy this extension via Chrome Browser management (see end).
 
 ## What it does
 
-- Intercepts send attempts on `To + Cc` visible fields.
+- Intercepts send attempts on `To + Cc` visible fields in **new compose**, **reply / reply all**, and **forward** (inline compose without `role=dialog` is supported).
+- Uses **document-level click capture** so it still works when Gmail swaps the Send control before you type in subject/body (empty forward/reply).
 - Ignores `Bcc` by design.
 - Warns when:
   - more than one visible recipient is detected, or
@@ -21,7 +24,7 @@ Browser extension MVP for Gmail Web and Outlook Web.
    - Edge: `edge://extensions`
 2. Enable Developer Mode.
 3. Click **Load unpacked** and select this project folder.
-4. Open Gmail Web or Outlook Web compose window.
+4. Open Gmail (new message, **Reply**, **Reply all**, or **Forward**) and test send.
 5. Run quick checks:
    - 1 recipient in `To`: no warning.
    - 2 recipients in `To`: warning appears.
@@ -38,5 +41,9 @@ Browser extension MVP for Gmail Web and Outlook Web.
 
 ## Notes
 
-- This is an MVP; recipient extraction still depends on provider DOM and can require tuning.
+- This is an MVP; recipient extraction still depends on Gmail’s DOM and can require tuning after Google UI changes.
 - Mobile apps and native desktop clients are not covered by this web package.
+
+## Google Workspace (enterprise)
+
+- Deploy with **Chrome Browser Cloud Management** (Admin console → **Devices → Chrome → Apps & extensions**), private Chrome Web Store listing, or `ExtensionInstallForcelist`. See [Chrome enterprise policies](https://chromeenterprise.google/policies/).

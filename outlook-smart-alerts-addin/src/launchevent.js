@@ -154,6 +154,31 @@ function toRecipientBucket(visibleCount) {
   return "6+";
 }
 
+/** Public URL path of the add-in root (e.g. /bcc-alert/addin) when page is under .../src/commands.html */
+function getAddinPublicBasePath() {
+  if (typeof window === "undefined" || !window.location?.pathname) {
+    return "";
+  }
+  const p = window.location.pathname;
+  const marker = "/src/";
+  const i = p.indexOf(marker);
+  if (i <= 0) {
+    return "";
+  }
+  return p.slice(0, i);
+}
+
+function getMetricsEndpoint() {
+  if (typeof window === "undefined" || !window.location?.origin) {
+    return "https://localhost:3000/api/metrics";
+  }
+  const base = getAddinPublicBasePath();
+  if (base) {
+    return `${window.location.origin}${base}/api/metrics`;
+  }
+  return `${window.location.origin}/api/metrics`;
+}
+
 function reportDecisionMetric({ decision, visibleCount }) {
   const payload = {
     eventName: "onMessageSend",
@@ -163,10 +188,7 @@ function reportDecisionMetric({ decision, visibleCount }) {
   };
 
   const body = JSON.stringify(payload);
-  const endpoint =
-    typeof window !== "undefined" && window?.location?.origin
-      ? `${window.location.origin}/api/metrics`
-      : "https://localhost:3000/api/metrics";
+  const endpoint = getMetricsEndpoint();
 
   try {
     if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
@@ -187,6 +209,10 @@ function reportDecisionMetric({ decision, visibleCount }) {
       // Ignore telemetry failures to avoid blocking send flow.
     });
   }
+}
+
+function onNewMessageComposeHandler(event) {
+  event.completed({ allowEvent: true });
 }
 
 function onMessageSendHandler(event) {
@@ -210,10 +236,14 @@ function onMessageSendHandler(event) {
   });
 }
 
-if (typeof Office !== "undefined" && typeof Office.onReady === "function") {
-  Office.onReady(() => {
+if (typeof Office !== "undefined") {
+  if (typeof Office.onReady === "function") {
+    Office.onReady();
+  }
+  if (Office.actions && typeof Office.actions.associate === "function") {
+    Office.actions.associate("onNewMessageComposeHandler", onNewMessageComposeHandler);
     Office.actions.associate("onMessageSendHandler", onMessageSendHandler);
-  });
+  }
 }
 
 if (typeof module !== "undefined" && module.exports) {
@@ -226,7 +256,10 @@ if (typeof module !== "undefined" && module.exports) {
     getUserLanguage,
     isMailboxRequirementSupported,
     toRecipientBucket,
+    getAddinPublicBasePath,
+    getMetricsEndpoint,
     reportDecisionMetric,
+    onNewMessageComposeHandler,
     onMessageSendHandler
   };
 }

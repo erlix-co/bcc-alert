@@ -1,17 +1,44 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="auto">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Visible Recipients Guard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./popup.css" />
   </head>
-  <body>
+  <body class="popup-body">
+    <a
+      class="popup-brand popup-brand-erlix"
+      href="https://erlix.net/"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Erlix"
+    >
+      <img src="./assets/erlix-logo-update.png" alt="Erlix" width="120" />
+    </a>
+    <a
+      class="popup-brand popup-brand-bcc"
+      href="https://erlix.net/bcc-alert/"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="BCC Alert"
+    >
+      <img src="./assets/bcc-alert-logo.png" alt="BCC Alert" width="150" />
+    </a>
     <main class="popup">
-      <h1 id="title"></h1>
-      <p class="label" id="label"></p>
-      <p class="counter" id="counter">0</p>
-      <button id="resetBtn" class="reset-btn"></button>
+      <h1 id="title" class="popup-headline"></h1>
+      <p id="statsLine" class="popup-stats" aria-live="polite"></p>
+      <button id="resetBtn" class="reset-btn" type="button"></button>
+      <label class="debug-row">
+        <input type="checkbox" id="debugToggle" />
+        <span id="debugLabel"></span>
+      </label>
     </main>
     <script src="./popup.js"></script>
   </body>

@@ -16,13 +16,9 @@ is rejected with:
 `Invalid manifest file`
 
 ## Repro summary
-1. Upload `manifest.diagnostic.xml` (no `OnMessageSend`) -> succeeds.
-2. Upload `manifest.probe-onsend.xml` (adds `OnMessageSend`) -> fails with invalid manifest.
-3. Upload `manifest.production.xml` (full Smart Alerts config) -> fails with invalid manifest.
+At the time of the ticket: manifests **without** `OnMessageSend` uploaded successfully to `Integrated apps`, while manifests **with** `OnMessageSend` (`LaunchEvent`) were rejected as `Invalid manifest file`, even though `npx office-addin-manifest validate manifest.production.xml` passed.
 
-All manifests validate successfully via:
-
-`npx office-addin-manifest validate <file>`
+The repository now keeps only `manifest.xml` (localhost), `manifest.template.xml` (source), and `manifest.production.xml` (deploy); older probe/fallback XMLs were removed as clutter.
 
 ## Runtime URLs (public, HTTPS, returning 200)
 - `https://erlix.net/bcc-alert/addin/src/commands.html`

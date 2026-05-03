@@ -49,13 +49,19 @@
       </Requirements>
       <Hosts>
         <Host xsi:type="MailHost">
+          <Runtimes>
+            <Runtime resid="WebViewRuntime.Url">
+              <Override type="javascript" resid="JSRuntime.Url" />
+            </Runtime>
+          </Runtimes>
           <DesktopFormFactor>
             <FunctionFile resid="Commands.Url" />
             <ExtensionPoint xsi:type="LaunchEvent">
               <LaunchEvents>
+                <LaunchEvent Type="OnNewMessageCompose" FunctionName="onNewMessageComposeHandler" />
                 <LaunchEvent Type="OnMessageSend" FunctionName="onMessageSendHandler" SendMode="PromptUser" />
               </LaunchEvents>
-              <SourceLocation resid="Commands.Url" />
+              <SourceLocation resid="WebViewRuntime.Url" />
             </ExtensionPoint>
           </DesktopFormFactor>
         </Host>
@@ -63,6 +69,8 @@
       <Resources>
         <bt:Urls>
           <bt:Url id="Commands.Url" DefaultValue="https://localhost:3000/src/commands.html" />
+          <bt:Url id="WebViewRuntime.Url" DefaultValue="https://localhost:3000/src/commands.html" />
+          <bt:Url id="JSRuntime.Url" DefaultValue="https://localhost:3000/src/launchevent.js" />
         </bt:Urls>
       </Resources>
     </VersionOverrides>

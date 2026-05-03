@@ -9,13 +9,21 @@ This project is a separate Outlook implementation of BCC Alert using Office Add-
 
 ## Current behavior
 
+- On **new message compose**, the add-in runtime starts in the background (`OnNewMessageCompose`; no UI).
 - On send, counts unique recipients in `To + Cc`.
 - If visible recipients count is greater than 1, send is stopped with a warning message.
 - If visible recipients count is 1 or less, send is allowed.
 
 ## Project files
 
-- `manifest.xml`: Add-in manifest with `LaunchEvent Type="OnMessageSend"` and `SendMode="PromptUser"`.
+Manifests (only these three):
+
+- `manifest.xml` — **local dev** (`https://localhost:3000/...`). Use with `npm start` and sideloading from disk.
+- `manifest.template.xml` — **source** for production URLs (`__BASE_URL__` placeholders). Do not upload as-is.
+- `manifest.production.xml` — **generated** by `npm run manifest:build` from the template. Upload this to the admin center / production sideload when the add-in is hosted on your HTTPS URL.
+
+Also:
+
 - `src/commands.html`: Runtime page loaded by Outlook.
 - `src/launchevent.js`: Event handler logic.
 
@@ -34,9 +42,16 @@ This project is a separate Outlook implementation of BCC Alert using Office Add-
 ## Clean project separation
 
 This Outlook add-in stays fully inside this project:
-- `C:\Users\טאטי\Projects\BCC-Alert\outlook-smart-alerts-addin`
+- `C:\Erlix\BCC-Alert\outlook-smart-alerts-addin`
 
 Do not place add-in runtime files under `LinkCheck`.
+
+## Event-based activation (no manual “open add-in”)
+
+Smart Alerts (`OnMessageSend`) must run without the user opening the task pane first.
+
+- The manifest declares a [`Runtimes`](https://learn.microsoft.com/office/dev/add-ins/outlook/autolaunch) block with `WebViewRuntime.Url` (HTML used on the web / Mac / New Outlook) and `Override type="javascript"` → `JSRuntime.Url` pointing at `src/launchevent.js` (used by **classic Outlook on Windows** so the handler loads without opening `commands.html`).
+- `OnNewMessageCompose` is registered with a no-op handler that only calls `event.completed({ allowEvent: true })` so the runtime starts when a **new** compose item opens, keeping send-time behavior reliable across clients.
 
 ## Build hosting bundle
 
@@ -71,7 +86,7 @@ Notes:
   - `ICON_URL` (default: `${origin}/linkcheck/logo.png`)
   - `HIGH_ICON_URL` (default: `ICON_URL`)
   - `SUPPORT_URL` (default: `${BASE_URL}/support/`)
-- Runtime telemetry posts to `/api/metrics` on the same host origin.
+- Runtime telemetry posts to `{add-in base}/api/metrics` (for example `https://erlix.net/bcc-alert/addin/api/metrics` when the add-in is under `/bcc-alert/addin/`). The Erlix `home` site build includes a small dev/preview handler for that path; on a static host, failed telemetry is ignored and does not block send.
 
 Recommended value for this project:
 - `BASE_URL=https://erlix.net/bcc-alert/addin`
@@ -82,6 +97,18 @@ Recommended value for this project:
 2. Open **Get Add-ins** > **My add-ins** > **Add a custom add-in** > **Add from file**.
 3. Select `manifest.xml` from this folder.
 4. Compose a new message and test send behavior.
+
+## Sideload in Outlook Classic (Windows desktop)
+
+**This is not the right place:** **File → Options → Add-ins → Manage: COM Add-ins → Go → Add…**  
+That dialog only registers legacy **COM** add-ins (`.dll`). A web add-in manifest (`.xml`) is **not** a COM add-in, so Outlook shows an error like *“is not a valid Office add-in”* — that is expected if you browse to `manifest.production.xml` there.
+
+**Use a web add-in path instead:**
+
+1. On the **Home** ribbon, open **Get Add-ins** (wording may vary by language, e.g. add-ins / store entry).
+2. Go to **My add-ins** → **Add a custom add-in** → **Add from File…** and choose `manifest.production.xml` (or `manifest.xml` for localhost testing).
+
+If you do not see **Get Add-ins** on the ribbon, try **File → Info** and look for **Manage Add-ins** (often opens the browser to manage add-ins for the mailbox). Organization-wide install uses **Microsoft 365 admin center** (Integrated apps / centralized deployment) with the same manifest — users then get the add-in without sideloading.
 
 ## Validation scenarios
 
