@@ -1,70 +1,236 @@
 <!doctype html>
-<html>
+<html lang="en" dir="auto">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>BCC Alert Runtime</title>
-    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    <script src="./launchevent.js"></script>
-    <script src="./taskpane.js" defer></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
-      body {
+      :root {
+        --erlix-bg: #070f24;
+        --erlix-bg-2: #0d1f47;
+        --erlix-text: #eff4ff;
+        --erlix-text-soft: #b6c7ea;
+        --erlix-border: rgba(95, 155, 255, 0.28);
+        --erlix-accent-red: #e53935;
+        --erlix-radius-lg: 14px;
+        --erlix-radius-sm: 9px;
+        --erlix-space-2: 10px;
+        --erlix-space-3: 14px;
+        --erlix-space-4: 18px;
+        --erlix-font-body: "Rubik", "Segoe UI", system-ui, sans-serif;
+        --erlix-transition: 0.22s cubic-bezier(0.25, 0.1, 0.25, 1);
+        --erlix-primary: #2d8cf0;
+        --erlix-primary-hover: #1d6ac9;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        :root {
+          --erlix-transition: 0.01ms;
+        }
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body.bcc-runtime-body {
         margin: 0;
-        font-family: "Segoe UI", Arial, sans-serif;
-        background: #0d1527;
-        color: #e8eefc;
+        min-height: 100%;
+        position: relative;
+        font-family: var(--erlix-font-body);
+        font-size: 14px;
+        color: var(--erlix-text);
+        background:
+          radial-gradient(circle at 12% 15%, rgba(53, 195, 255, 0.12), transparent 38%),
+          radial-gradient(circle at 88% 88%, rgba(45, 140, 240, 0.14), transparent 42%),
+          linear-gradient(150deg, var(--erlix-bg) 0%, var(--erlix-bg-2) 100%);
       }
-      main {
-        padding: 14px;
+
+      .bcc-brand {
+        position: absolute;
+        z-index: 2;
+        line-height: 0;
+        opacity: 0.95;
+        transition: opacity var(--erlix-transition);
       }
-      h1 {
-        font-size: 16px;
-        margin: 0 0 8px;
+
+      .bcc-brand:hover {
+        opacity: 1;
       }
-      p {
-        margin: 0 0 12px;
-        color: #c3d2f7;
-        font-size: 13px;
-        line-height: 1.45;
+
+      .bcc-brand img {
+        display: block;
+        height: auto;
+        max-width: 120px;
+        border-radius: 8px;
       }
+
+      .bcc-brand--erlix {
+        top: var(--erlix-space-2);
+        left: var(--erlix-space-2);
+      }
+
+      .bcc-brand--bcc {
+        bottom: var(--erlix-space-2);
+        right: var(--erlix-space-2);
+      }
+
+      .bcc-brand--bcc img {
+        max-width: 72px;
+      }
+
+      .bcc-panel {
+        width: 100%;
+        min-height: 240px;
+        padding: 52px var(--erlix-space-4) 88px;
+        position: relative;
+      }
+
+      .bcc-panel::before {
+        content: "";
+        position: absolute;
+        inset: 10px;
+        border-radius: var(--erlix-radius-lg);
+        border: 1px solid var(--erlix-border);
+        pointer-events: none;
+        opacity: 0.45;
+      }
+
+      .bcc-panel__content {
+        position: relative;
+        z-index: 1;
+      }
+
+      .bcc-panel__title {
+        margin: 0 0 var(--erlix-space-2);
+        font-size: 1.15rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.25;
+        color: var(--erlix-accent-red);
+      }
+
+      .bcc-panel__lead {
+        margin: 0 0 var(--erlix-space-3);
+        font-size: 0.9rem;
+        font-weight: 500;
+        line-height: 1.55;
+        color: var(--erlix-text);
+        white-space: pre-line;
+      }
+
+      .bcc-panel__stats {
+        margin: 0 0 var(--erlix-space-3);
+        font-size: 0.85rem;
+        font-weight: 500;
+        line-height: 1.5;
+        color: var(--erlix-text);
+      }
+
+      .bcc-panel__stat-number {
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--erlix-accent-red);
+      }
+
       .status {
-        border-radius: 10px;
+        border-radius: var(--erlix-radius-sm);
         padding: 10px 12px;
         margin-bottom: 12px;
-        font-size: 13px;
+        font-size: 0.88rem;
+        font-weight: 500;
       }
-      .ok {
-        background: #123528;
+
+      .status.ok {
+        background: rgba(18, 53, 40, 0.85);
         color: #d5fbe2;
+        border: 1px solid rgba(120, 220, 160, 0.25);
       }
-      .warn {
-        background: #3b1f21;
+
+      .status.warn {
+        background: rgba(59, 31, 33, 0.9);
         color: #ffd8dc;
+        border: 1px solid rgba(255, 120, 130, 0.28);
       }
-      button {
+
+      button#refreshBtn {
         appearance: none;
-        border: 0;
-        border-radius: 8px;
-        padding: 9px 12px;
-        color: #fff;
-        background: #2663eb;
-        cursor: pointer;
+        width: 100%;
+        border: 1px solid var(--erlix-border);
+        border-radius: var(--erlix-radius-sm);
+        padding: 10px var(--erlix-space-3);
+        font-family: var(--erlix-font-body);
+        font-size: 0.82rem;
         font-weight: 600;
+        color: var(--erlix-text);
+        background: rgba(13, 28, 61, 0.55);
+        cursor: pointer;
+        transition: border-color var(--erlix-transition), transform var(--erlix-transition),
+          box-shadow var(--erlix-transition), background var(--erlix-transition);
       }
+
+      button#refreshBtn:hover {
+        border-color: rgba(95, 155, 255, 0.45);
+        box-shadow: 0 6px 20px rgba(3, 8, 23, 0.4);
+        transform: translateY(-1px);
+      }
+
+      button#refreshBtn:active {
+        transform: translateY(0);
+      }
+
+      button#refreshBtn:focus-visible {
+        outline: 2px solid rgba(53, 195, 255, 0.7);
+        outline-offset: 2px;
+      }
+
       .small {
         margin-top: 10px;
-        color: #9fb1df;
-        font-size: 12px;
+        color: var(--erlix-text-soft);
+        font-size: 0.78rem;
+        line-height: 1.45;
       }
     </style>
   </head>
-  <body>
-    <main>
-      <h1 id="title">BCC Alert</h1>
-      <p id="description">בדיקה ידנית לפני שליחה לנמענים גלויים מרובים.</p>
-      <div id="status" class="status">טוען...</div>
-      <button id="refreshBtn" type="button">בדוק עכשיו</button>
-      <div id="details" class="small"></div>
+  <body class="bcc-runtime-body">
+    <a
+      class="bcc-brand bcc-brand--erlix"
+      href="https://erlix.net/"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Erlix"
+    >
+      <img src="../assets/erlix-logo-update.png" alt="Erlix" width="120" />
+    </a>
+    <a
+      class="bcc-brand bcc-brand--bcc"
+      href="https://erlix.net/bcc-alert/"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="BCC Alert"
+    >
+      <img src="../assets/icon-128.png" alt="BCC Alert" width="72" />
+    </a>
+    <main class="bcc-panel">
+      <div class="bcc-panel__content">
+        <h1 id="title" class="bcc-panel__title">BCC Alert</h1>
+        <p id="lead" class="bcc-panel__lead"></p>
+        <p id="statsLine" class="bcc-panel__stats" aria-live="polite"></p>
+        <div id="status" class="status">…</div>
+        <button id="refreshBtn" type="button"></button>
+        <div id="details" class="small"></div>
+      </div>
     </main>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <script src="./launchevent.js"></script>
+    <script src="./taskpane.js" defer></script>
   </body>
 </html>

@@ -4,10 +4,90 @@ const POLICY = {
   maxVisibleRecipients: 1
 };
 
-const BLOCK_MESSAGES = {
-  he: "שים לב! הנך שולח למספר נמענים באופן חשוף. שקול להשתמש בעותק מוסתר.",
-  en: "You are sending to multiple visible recipients. Consider using Bcc."
-};
+/** Roaming key: cumulative count of send attempts blocked by visible-recipient policy (per mailbox). */
+const ROAMING_INTERCEPT_COUNT_KEY = "bccAlertVisibleSendInterceptCount";
+
+function getInterceptCountSync() {
+  try {
+    const settings = Office?.context?.roamingSettings;
+    if (!settings?.get) return 0;
+    return Math.max(0, Math.floor(Number(settings.get(ROAMING_INTERCEPT_COUNT_KEY)) || 0));
+  } catch (_error) {
+    return 0;
+  }
+}
+
+function bumpInterceptCountSync() {
+  try {
+    const settings = Office?.context?.roamingSettings;
+    if (!settings?.get || !settings?.set) {
+      return getInterceptCountSync() + 1;
+    }
+    const next = getInterceptCountSync() + 1;
+    settings.set(ROAMING_INTERCEPT_COUNT_KEY, next);
+    if (typeof settings.saveAsync === "function") {
+      settings.saveAsync(() => {});
+    }
+    return next;
+  } catch (_error) {
+    return getInterceptCountSync() + 1;
+  }
+}
+
+function getInterceptStatsDisplayParts(lang, count) {
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  if (lang === "he") {
+    if (n === 1) {
+      return {
+        before: "עד היום נמנע ממך ",
+        numberText: "1",
+        after: " ניסיון שליחה גלויה למספר נמענים."
+      };
+    }
+    return {
+      before: "עד היום נמנעו ממך ",
+      numberText: String(n),
+      after: " פעמים שליחה גלויה למספר נמענים."
+    };
+  }
+  if (n === 1) {
+    return {
+      before: "So far, you have been protected from ",
+      numberText: "1",
+      after: " risky visible multi-recipient send."
+    };
+  }
+  return {
+    before: "So far, you have been protected from ",
+    numberText: String(n),
+    after: " risky visible multi-recipient sends."
+  };
+}
+
+function formatInterceptStatsLine(lang, count) {
+  const { before, numberText, after } = getInterceptStatsDisplayParts(lang, count);
+  return `${before}${numberText}${after}`;
+}
+
+function buildSmartAlertErrorMessage(lang, interceptTotal) {
+  const isHe = lang === "he";
+  const lines = isHe
+    ? [
+        "אתה עומד לשלוח מייל למספר נמענים גלויים",
+        "כל הנמענים יראו אחד את השני!",
+        "",
+        "מומלץ להשתמש ב־BCC לשמירה על פרטיות."
+      ]
+    : [
+        "You are about to send an email to multiple visible recipients.",
+        "All recipients will be able to see each other's addresses.",
+        "",
+        "We recommend using Bcc to protect privacy."
+      ];
+  const n = Math.max(0, Math.floor(Number(interceptTotal) || 0));
+  lines.push("", formatInterceptStatsLine(isHe ? "he" : "en", n));
+  return lines.join("\n");
+}
 
 const GROUP_HINT_PATTERN =
   /(group|list|distribution|distlist|dl|all[-_.]?|everyone|team|staff|dept|department|broadcast|members|alias|mailing|קבוצה|תפוצה|צוות|מחלקה|כולם|רשימה)/i;
@@ -224,10 +304,11 @@ function onMessageSendHandler(event) {
   const item = Office.context.mailbox.item;
   assessVisibleRecipients(item).then(({ effectiveVisibleCount }) => {
     if (effectiveVisibleCount > POLICY.maxVisibleRecipients) {
+      const interceptTotal = bumpInterceptCountSync();
       reportDecisionMetric({ decision: "blocked", visibleCount: effectiveVisibleCount });
       event.completed({
         allowEvent: false,
-        errorMessage: BLOCK_MESSAGES[getUserLanguage()]
+        errorMessage: buildSmartAlertErrorMessage(getUserLanguage(), interceptTotal)
       });
       return;
     }
@@ -248,6 +329,12 @@ if (typeof Office !== "undefined") {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    ROAMING_INTERCEPT_COUNT_KEY,
+    getInterceptCountSync,
+    bumpInterceptCountSync,
+    getInterceptStatsDisplayParts,
+    formatInterceptStatsLine,
+    buildSmartAlertErrorMessage,
     getRecipientsAsync,
     countVisibleRecipients,
     getGroupSignalReason,

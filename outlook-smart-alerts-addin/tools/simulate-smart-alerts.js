@@ -3,13 +3,29 @@
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
+const roamingStore = {};
+
 global.Office = {
   AsyncResultStatus: {
     Succeeded: "succeeded"
   },
   context: {
+    displayLanguage: "he-IL",
     requirements: {
       isSetSupported: (setName, minVersion) => setName === "Mailbox" && minVersion === "1.12"
+    },
+    roamingSettings: {
+      get(name) {
+        return Object.prototype.hasOwnProperty.call(roamingStore, name) ? roamingStore[name] : undefined;
+      },
+      set(name, value) {
+        roamingStore[name] = value;
+      },
+      saveAsync(callback) {
+        if (typeof callback === "function") {
+          callback({ status: Office.AsyncResultStatus.Succeeded });
+        }
+      }
     },
     mailbox: {
       item: null

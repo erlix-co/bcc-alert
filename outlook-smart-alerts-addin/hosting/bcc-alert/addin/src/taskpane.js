@@ -1,23 +1,25 @@
-/* global Office, assessVisibleRecipients, reportDecisionMetric, getUserLanguage, isMailboxRequirementSupported */
+/* global Office, assessVisibleRecipients, reportDecisionMetric, getUserLanguage, isMailboxRequirementSupported, getInterceptCountSync, getInterceptStatsDisplayParts */
 
 const TEXTS = {
   he: {
-    title: "BCC Alert",
-    description: "ניטור אוטומטי לפני שליחה לנמענים גלויים מרובים.",
+    title: "שים לב!",
+    leadBody:
+      "אתה עומד לשלוח מייל למספר נמענים גלויים\nכל הנמענים יראו אחד את השני!\n\nמומלץ להשתמש ב־BCC לשמירה על פרטיות.",
     button: "רענון ידני",
     safe: "נראה תקין: יש עד נמען גלוי אחד.",
-    warning: "אזהרה: זוהו מספר נמענים גלויים. מומלץ להשתמש ב-Bcc.",
+    warning: "אזהרה: זוהו מספר נמענים גלויים. מומלץ להשתמש ב־BCC.",
     unsupported: "לתיבה זו אין תמיכה מלאה ב-Smart Alerts (Mailbox 1.12).",
     composeMissing: "לא זוהה חלון כתיבת הודעה.",
     details: (count) => `נמענים גלויים (To + Cc): ${count}`,
     groupHint: "זוהתה קבוצת תפוצה/קבוצה; ההתראה מחמירה בכוונה.",
     groupSignals: (n) => `אותות זיהוי קבוצה: ${n}`,
-    notifWarning: "BCC Alert: זוהו מספר נמענים גלויים. מומלץ להשתמש ב-Bcc.",
-    notifSafe: "BCC Alert: נמען גלוי אחד או פחות."
+    notifWarning: "יותר מנמען גלוי אחד — מומלץ BCC.",
+    notifSafe: "עד נמען גלוי אחד — נראה תקין."
   },
   en: {
-    title: "BCC Alert",
-    description: "Automatic monitoring for visible recipients before send.",
+    title: "Attention!",
+    leadBody:
+      "You are about to send an email to multiple visible recipients.\nAll recipients will be able to see each other's addresses.\n\nWe recommend using Bcc to protect privacy.",
     button: "Manual refresh",
     safe: "Looks safe: one or fewer visible recipients.",
     warning: "Warning: multiple visible recipients detected. Consider Bcc.",
@@ -26,8 +28,8 @@ const TEXTS = {
     details: (count) => `Visible recipients (To + Cc): ${count}`,
     groupHint: "A distribution list/group was detected; warning is intentionally conservative.",
     groupSignals: (n) => `Group detection signals: ${n}`,
-    notifWarning: "BCC Alert: multiple visible recipients detected. Consider Bcc.",
-    notifSafe: "BCC Alert: one or fewer visible recipients."
+    notifWarning: "Multiple visible recipients — consider Bcc.",
+    notifSafe: "One or fewer visible recipients — looks fine."
   }
 };
 
@@ -40,6 +42,23 @@ function setStatus(text, isWarning) {
   const status = document.getElementById("status");
   status.textContent = text;
   status.className = `status ${isWarning ? "warn" : "ok"}`;
+}
+
+function renderStatsLine(lang) {
+  const statsLine = document.getElementById("statsLine");
+  if (!statsLine) return;
+  if (typeof getInterceptStatsDisplayParts !== "function" || typeof getInterceptCountSync !== "function") {
+    statsLine.textContent = "";
+    return;
+  }
+  const parts = getInterceptStatsDisplayParts(lang, getInterceptCountSync());
+  statsLine.textContent = "";
+  statsLine.appendChild(document.createTextNode(parts.before));
+  const span = document.createElement("span");
+  span.className = "bcc-panel__stat-number";
+  span.textContent = parts.numberText;
+  statsLine.appendChild(span);
+  statsLine.appendChild(document.createTextNode(parts.after));
 }
 
 function updateComposeNotification(lang, warning) {
@@ -75,6 +94,7 @@ async function refreshCheck(lang) {
   const warning = visibleCount > 1;
   const currentSignature = signatureFromAssessment(assessment);
 
+  renderStatsLine(lang);
   setStatus(warning ? TEXTS[lang].warning : TEXTS[lang].safe, warning);
   document.getElementById("details").textContent = assessment.hasLikelyGroup
     ? `${TEXTS[lang].details(visibleCount)} · ${TEXTS[lang].groupHint} · ${TEXTS[lang].groupSignals(
@@ -94,7 +114,10 @@ Office.onReady(() => {
   const i18n = TEXTS[lang] || TEXTS.en;
 
   document.getElementById("title").textContent = i18n.title;
-  document.getElementById("description").textContent = i18n.description;
+  const lead = document.getElementById("lead");
+  if (lead) {
+    lead.textContent = i18n.leadBody;
+  }
   document.getElementById("refreshBtn").textContent = i18n.button;
   document.getElementById("refreshBtn").addEventListener("click", () => {
     refreshCheck(lang);
@@ -103,6 +126,8 @@ Office.onReady(() => {
   if (typeof isMailboxRequirementSupported === "function" && !isMailboxRequirementSupported("1.12")) {
     setStatus(i18n.unsupported, true);
     document.getElementById("details").textContent = "";
+    const statsLine = document.getElementById("statsLine");
+    if (statsLine) statsLine.textContent = "";
     return;
   }
 
