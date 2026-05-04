@@ -34,6 +34,33 @@ function bumpInterceptCountSync() {
   }
 }
 
+/**
+ * Persists intercept count then resolves — required before `event.completed` in OnMessageSend,
+ * otherwise the runtime may tear down before `roamingSettings.saveAsync` finishes (counter stuck at 1).
+ */
+function bumpInterceptCountAsync() {
+  return new Promise((resolve) => {
+    try {
+      const settings = Office?.context?.roamingSettings;
+      if (!settings?.get || !settings?.set) {
+        resolve(getInterceptCountSync() + 1);
+        return;
+      }
+      const next = getInterceptCountSync() + 1;
+      settings.set(ROAMING_INTERCEPT_COUNT_KEY, next);
+      if (typeof settings.saveAsync !== "function") {
+        resolve(next);
+        return;
+      }
+      settings.saveAsync(() => {
+        resolve(next);
+      });
+    } catch (_error) {
+      resolve(getInterceptCountSync() + 1);
+    }
+  });
+}
+
 function getInterceptStatsDisplayParts(lang, count) {
   const n = Math.max(0, Math.floor(Number(count) || 0));
   if (lang === "he") {
@@ -86,6 +113,7 @@ function buildSmartAlertErrorMessage(lang, interceptTotal) {
       ];
   const n = Math.max(0, Math.floor(Number(interceptTotal) || 0));
   lines.push("", formatInterceptStatsLine(isHe ? "he" : "en", n));
+  lines.push("", isHe ? "מופעל על ידי erlix.net" : "Powered by erlix.net");
   return lines.join("\n");
 }
 
@@ -304,11 +332,12 @@ function onMessageSendHandler(event) {
   const item = Office.context.mailbox.item;
   assessVisibleRecipients(item).then(({ effectiveVisibleCount }) => {
     if (effectiveVisibleCount > POLICY.maxVisibleRecipients) {
-      const interceptTotal = bumpInterceptCountSync();
-      reportDecisionMetric({ decision: "blocked", visibleCount: effectiveVisibleCount });
-      event.completed({
-        allowEvent: false,
-        errorMessage: buildSmartAlertErrorMessage(getUserLanguage(), interceptTotal)
+      bumpInterceptCountAsync().then((interceptTotal) => {
+        reportDecisionMetric({ decision: "blocked", visibleCount: effectiveVisibleCount });
+        event.completed({
+          allowEvent: false,
+          errorMessage: buildSmartAlertErrorMessage(getUserLanguage(), interceptTotal)
+        });
       });
       return;
     }
@@ -332,6 +361,7 @@ if (typeof module !== "undefined" && module.exports) {
     ROAMING_INTERCEPT_COUNT_KEY,
     getInterceptCountSync,
     bumpInterceptCountSync,
+    bumpInterceptCountAsync,
     getInterceptStatsDisplayParts,
     formatInterceptStatsLine,
     buildSmartAlertErrorMessage,

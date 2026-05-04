@@ -84,6 +84,12 @@ async function main() {
     bcc: []
   });
 
+  await runScenario("תרחיש 2ב - חסימה נוספת (מונה מצטבר אמור להיות 2)", {
+    to: [{ emailAddress: "one@example.com" }],
+    cc: [{ emailAddress: "two@example.com" }],
+    bcc: []
+  });
+
   await runScenario("תרחיש 3 - Bcc בלבד", {
     to: [],
     cc: [],
