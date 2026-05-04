@@ -27,6 +27,250 @@
   let lastComposeRoot = null;
   let lastSendBtn = null;
   let popupOpen = false;
+  const forceSendOnceRoots = new WeakSet();
+  let focusedRecipientSnapshot = { keys: new Set(), atMs: 0 };
+  let lastRecipientEditorSnapshot = { keys: new Set(), atMs: 0 };
+
+  const markForceSendOnce = (composeRoot) => {
+    if (composeRoot && composeRoot.nodeType === 1) {
+      forceSendOnceRoots.add(composeRoot);
+    }
+  };
+
+  const clearForceSendOnce = (composeRoot) => {
+    if (composeRoot && composeRoot.nodeType === 1) {
+      forceSendOnceRoots.delete(composeRoot);
+    }
+  };
+
+  const consumeForceSendOnce = (composeRoot) => {
+    if (!composeRoot || composeRoot.nodeType !== 1) return false;
+    if (!forceSendOnceRoots.has(composeRoot)) return false;
+    forceSendOnceRoots.delete(composeRoot);
+    return true;
+  };
+
+  const hasRecipientEditorFocus = () => {
+    const el = document.activeElement;
+    if (!el || el.nodeType !== 1) return false;
+    const tag = String(el.tagName || "").toLowerCase();
+    const isTextLike =
+      tag === "input" ||
+      tag === "textarea" ||
+      el.getAttribute("contenteditable") === "true" ||
+      el.getAttribute("role") === "textbox" ||
+      el.getAttribute("role") === "combobox";
+    if (!isTextLike) return false;
+
+    const own = [
+      el.getAttribute("name"),
+      el.getAttribute("aria-label"),
+      el.getAttribute("placeholder"),
+      el.getAttribute("data-name"),
+      el.getAttribute("id"),
+      typeof el.className === "string" ? el.className : ""
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (/(^|\b)(to|cc)(\b|$)|\bאל\b|\bעותק\b/i.test(own)) return true;
+
+    const parentHint = el.closest(
+      '[name="to"], [name="cc"], [aria-label*="To"], [aria-label*="Cc"], [aria-label*="אל"], [aria-label*="עותק"]'
+    );
+    return Boolean(parentHint);
+  };
+
+  const recipientKeysFromFocusedEditor = () => {
+    const el = document.activeElement;
+    const set = new Set();
+    if (!el || el.nodeType !== 1 || !hasRecipientEditorFocus()) return set;
+
+    const raw = normalizeRecipientToken(
+      (typeof el.value === "string" ? el.value : "") || el.innerText || el.textContent || ""
+    );
+    if (!raw) return set;
+
+    const emailMatches = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
+    if (emailMatches && emailMatches.length) {
+      emailMatches.forEach((e) => set.add(`email:${String(e).toLowerCase()}`));
+      return set;
+    }
+
+    for (const token of raw.split(/[,;\n\r]+/).map((x) => normalizeRecipientToken(x)).filter(Boolean)) {
+      if (token.length > 1 && !/^(to|cc|bcc)\s*:?\s*$/i.test(token)) {
+        set.add(`focus:${token}`);
+      }
+    }
+    return set;
+  };
+
+  const parseRecipientKeysFromRawText = (rawText, prefix) => {
+    const set = new Set();
+    const raw = normalizeRecipientToken(rawText);
+    if (!raw) return set;
+    const emailMatches = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
+    if (emailMatches && emailMatches.length) {
+      emailMatches.forEach((e) => set.add(`email:${String(e).toLowerCase()}`));
+      return set;
+    }
+    for (const token of raw.split(/[,;\n\r]+/).map((x) => normalizeRecipientToken(x)).filter(Boolean)) {
+      if (token.length > 1 && !/^(to|cc|bcc)\s*:?\s*$/i.test(token)) {
+        set.add(`${prefix}:${token}`);
+      }
+    }
+    return set;
+  };
+
+  const snapshotFocusedRecipientsNow = () => {
+    const el = document.activeElement;
+    if (!el || el.nodeType !== 1 || !hasRecipientEditorFocus()) {
+      focusedRecipientSnapshot = { keys: new Set(), atMs: 0 };
+      return;
+    }
+    const raw = (typeof el.value === "string" ? el.value : "") || el.innerText || el.textContent || "";
+    focusedRecipientSnapshot = {
+      keys: parseRecipientKeysFromRawText(raw, "focussnap"),
+      atMs: Date.now()
+    };
+  };
+
+  const getRecentFocusedSnapshotCount = () => {
+    if (!focusedRecipientSnapshot?.keys) return 0;
+    if (!focusedRecipientSnapshot.atMs || Date.now() - focusedRecipientSnapshot.atMs > 3000) return 0;
+    return focusedRecipientSnapshot.keys.size;
+  };
+
+  const updateRecipientEditorSnapshotFromElement = (el) => {
+    if (!el || el.nodeType !== 1) return;
+    const txt = (typeof el.value === "string" ? el.value : "") || el.innerText || el.textContent || "";
+    const keys = parseRecipientKeysFromRawText(txt, "editorlive");
+    if (!keys.size) return;
+    lastRecipientEditorSnapshot = { keys, atMs: Date.now() };
+  };
+
+  const captureRecipientEditorFromEventTarget = (target) => {
+    if (!target || target.nodeType !== 1) return;
+    const t = target;
+    const editor = t.closest?.(
+      'input[name="to"], textarea[name="to"], input[name="cc"], textarea[name="cc"], [name="to"][contenteditable="true"], [name="cc"][contenteditable="true"], [role="combobox"], [contenteditable="true"]'
+    );
+    if (editor) updateRecipientEditorSnapshotFromElement(editor);
+  };
+
+  const getRecentRecipientEditorSnapshotCount = () => {
+    if (!lastRecipientEditorSnapshot?.keys) return 0;
+    if (!lastRecipientEditorSnapshot.atMs || Date.now() - lastRecipientEditorSnapshot.atMs > 8000) return 0;
+    return lastRecipientEditorSnapshot.keys.size;
+  };
+
+  const recipientKeysFromLiveRecipientEditors = (root) => {
+    const set = new Set();
+    if (!root?.querySelectorAll) return set;
+
+    const selector = [
+      'input[name="to"]',
+      'textarea[name="to"]',
+      'input[name="cc"]',
+      'textarea[name="cc"]',
+      '[name="to"][contenteditable="true"]',
+      '[name="cc"][contenteditable="true"]',
+      '[aria-label*="To"][contenteditable="true"]',
+      '[aria-label*="Cc"][contenteditable="true"]',
+      '[aria-label*="אל"][contenteditable="true"]',
+      '[aria-label*="עותק"][contenteditable="true"]',
+      '[role="combobox"][aria-label*="To"]',
+      '[role="combobox"][aria-label*="Cc"]',
+      '[role="combobox"][aria-label*="אל"]',
+      '[role="combobox"][aria-label*="עותק"]'
+    ].join(", ");
+
+    for (const el of root.querySelectorAll(selector)) {
+      const raw = normalizeRecipientToken(
+        (typeof el.value === "string" ? el.value : "") || el.innerText || el.textContent || ""
+      );
+      if (!raw) continue;
+      const emailMatches = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
+      if (emailMatches && emailMatches.length) {
+        emailMatches.forEach((e) => set.add(`email:${String(e).toLowerCase()}`));
+        continue;
+      }
+      for (const token of raw.split(/[,;\n\r]+/).map((x) => normalizeRecipientToken(x)).filter(Boolean)) {
+        if (token.length > 1 && !/^(to|cc|bcc)\s*:?\s*$/i.test(token)) {
+          set.add(`live:${token}`);
+        }
+      }
+    }
+    return set;
+  };
+
+  const headerEmailsNearSend = (sendBtn) => {
+    const set = new Set();
+    const dialog = nearestNonExcludedDialog(sendBtn) || findComposeRootAnchored(sendBtn);
+    if (!dialog?.querySelectorAll) return set;
+    const body =
+      dialog.querySelector('div[role="textbox"][g_editable="true"]') ||
+      dialog.querySelector('[contenteditable="true"]');
+    if (!body?.getBoundingClientRect) return set;
+    const bodyTop = body.getBoundingClientRect().top;
+    for (const el of dialog.querySelectorAll("span, div, a")) {
+      if (!el || el.nodeType !== 1) continue;
+      if (el.closest("blockquote, .gmail_quote, .gmail_quote_container, .gmail_attr")) continue;
+      const r = el.getBoundingClientRect?.();
+      if (!r || r.bottom > bodyTop + 20) continue;
+      const txt = String(el.innerText || el.textContent || "").trim();
+      if (!txt || txt.length > 180) continue;
+      const matches = txt.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
+      if (!matches) continue;
+      matches.forEach((m) => set.add(String(m).toLowerCase()));
+    }
+    return set;
+  };
+
+  const getAllVisibleRecipientsGlobal = (sendBtn) => {
+    const set = new Set();
+    if (!sendBtn?.getBoundingClientRect) return set;
+    const sr = sendBtn.getBoundingClientRect();
+    const sendDlg = sendBtn.closest?.("div[role='dialog']");
+
+    for (const el of document.querySelectorAll("[data-hovercard-id], span[email], [email], a[href^='mailto:']")) {
+      if (!el || el.nodeType !== 1) continue;
+      if (el.closest("blockquote, .gmail_quote, .gmail_quote_container, .gmail_attr")) continue;
+      if (isBccChip(el)) continue;
+
+      const r = el.getBoundingClientRect?.();
+      if (!r) continue;
+      const dlg = el.closest?.("div[role='dialog']");
+      const sameDialog = Boolean(dlg && sendDlg && dlg === sendDlg);
+      if (!sameDialog && Math.abs(r.top - sr.top) > 2000) continue;
+
+      const key = extractRecipientKeyFromElement(el);
+      if (key) set.add(key);
+    }
+    return set;
+  };
+
+  const commitRecipientEditorIfFocused = () => {
+    const el = document.activeElement;
+    if (!el || el.nodeType !== 1 || !hasRecipientEditorFocus()) return;
+    try {
+      el.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          code: "Enter",
+          bubbles: true,
+          cancelable: true
+        })
+      );
+    } catch (_error) {
+      // ignore
+    }
+    try {
+      if (typeof el.blur === "function") el.blur();
+    } catch (_error) {
+      // ignore
+    }
+  };
 
   const persistBlockedCount = () => {
     chrome.storage.local.set({ [STORAGE_KEY]: blockedCountCache });
@@ -64,7 +308,8 @@
     const aria = (el.getAttribute("aria-label") || "").toLowerCase();
     const txt = (el.innerText || "").toLowerCase();
     const hid = (el.getAttribute("data-hovercard-id") || "").trim().toLowerCase();
-    return hid.includes("@") || aria.includes("@") || txt.includes("@");
+    // Gmail chips may contain display names without '@' until commit/resolve.
+    return Boolean(hid || aria || txt);
   };
 
   const extractEmailFromChip = (chip) => {
@@ -107,6 +352,45 @@
     return null;
   };
 
+  const normalizeRecipientToken = (value) =>
+    String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+
+  const extractRecipientKeyFromElement = (el) => {
+    if (!el || el.nodeType !== 1) return null;
+    const em = extractEmailFromElement(el);
+    if (em) return `email:${em}`;
+
+    const hid = normalizeRecipientToken(el.getAttribute("data-hovercard-id"));
+    if (hid && !hid.includes("@") && hid.length > 1) {
+      return `hid:${hid}`;
+    }
+
+    const drc = (el.getAttribute("data-recipient-context") || "").trim();
+    if (drc) {
+      try {
+        const j = JSON.parse(drc);
+        const nm = normalizeRecipientToken(j?.name || j?.displayName || "");
+        if (nm && nm.length > 1) return `name:${nm}`;
+      } catch {
+        const nm = normalizeRecipientToken(drc);
+        if (nm && nm.length > 1) return `ctx:${nm}`;
+      }
+    }
+
+    const aria = normalizeRecipientToken(el.getAttribute("aria-label"));
+    if (aria && aria.length > 1 && !/^(to|cc|bcc)\s*:?\s*$/i.test(aria)) {
+      return `aria:${aria}`;
+    }
+    const txt = normalizeRecipientToken(el.innerText || el.textContent || "");
+    if (txt && txt.length > 1 && !/^(to|cc|bcc)\s*:?\s*$/i.test(txt)) {
+      return `txt:${txt}`;
+    }
+    return null;
+  };
+
   /** Looser than `isRecipientChip` — Forward inline may use `span[email]` without hovercard id. */
   const isDomWalkRecipientCandidate = (el) => {
     if (!el || el.nodeType !== 1) return false;
@@ -114,7 +398,7 @@
     const emAttr = (el.getAttribute("email") || "").trim().toLowerCase();
     if (emAttr.includes("@")) return true;
     if (el.matches && el.matches("a[href^='mailto:'], a[href^='MAILTO:']")) return true;
-    if (el.hasAttribute("data-hovercard-id")) return isRecipientChip(el);
+    if (el.hasAttribute("data-hovercard-id")) return true;
     if (el.matches && el.matches("span[email]")) return true;
     if (el.hasAttribute("data-recipient-context")) return true;
     const sen = (el.getAttribute("data-sentinel") || "").toLowerCase();
@@ -122,7 +406,7 @@
     return false;
   };
 
-  const emailsFromNamedRecipientInputs = (root) => {
+  const recipientKeysFromNamedRecipientInputs = (root) => {
     const set = new Set();
     if (!root?.querySelectorAll) return set;
     for (const inp of root.querySelectorAll(
@@ -132,7 +416,12 @@
       if (!v) continue;
       for (const part of v.split(/[,;\n\r]+/).map((x) => x.trim()).filter(Boolean)) {
         const m = part.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi);
-        if (m) m.forEach((e) => set.add(e.toLowerCase()));
+        if (m && m.length) {
+          m.forEach((e) => set.add(`email:${e.toLowerCase()}`));
+          continue;
+        }
+        const t = normalizeRecipientToken(part);
+        if (t.length > 1) set.add(`input:${t}`);
       }
     }
     return set;
@@ -145,17 +434,17 @@
    * Collect emails under `root` for DOM-walk / legacy merge: hovercard, recipient-context,
    * `span[email]`, mailto — excludes blockquote / Bcc.
    */
-  const emailsFromChipNodesIn = (root) => {
+  const recipientKeysFromChipNodesIn = (root) => {
     const set = new Set();
     if (!root || !root.querySelectorAll) return set;
     for (const c of root.querySelectorAll(RECIPIENT_DOM_SEL)) {
       if (!c || c.nodeType !== 1) continue;
       if (c.closest("blockquote")) continue;
       if (!isDomWalkRecipientCandidate(c)) continue;
-      const em = extractEmailFromElement(c);
-      if (em) set.add(em.toLowerCase());
+      const key = extractRecipientKeyFromElement(c);
+      if (key) set.add(key);
     }
-    emailsFromNamedRecipientInputs(root).forEach((em) => set.add(em));
+    recipientKeysFromNamedRecipientInputs(root).forEach((key) => set.add(key));
     return set;
   };
 
@@ -163,10 +452,7 @@
     Array.from(root.querySelectorAll("span[data-hovercard-id]")).filter((el) => {
       if (!el || el.nodeType !== 1) return false;
       if (el.closest("blockquote")) return false;
-      const raw = (el.getAttribute("email") || el.getAttribute("data-hovercard-id") || "")
-        .trim()
-        .toLowerCase();
-      return raw.includes("@");
+      return isRecipientChip(el);
     });
 
   const countChips = (root) => {
@@ -181,7 +467,7 @@
       if (email.includes("@")) unique.add(email);
     });
 
-    emailsFromChipNodesIn(root).forEach((em) => unique.add(em));
+    recipientKeysFromChipNodesIn(root).forEach((key) => unique.add(key));
 
     return { toCc: unique.size, bcc: all.length - visible.length };
   };
@@ -202,8 +488,8 @@
       const r = el.getBoundingClientRect();
       return r.bottom <= bodyRect.top + 12;
     });
-    const emails = chips.map(extractEmailFromElement).filter(Boolean);
-    return [...new Set(emails)];
+    const keys = chips.map(extractRecipientKeyFromElement).filter(Boolean);
+    return [...new Set(keys)];
   };
 
   const headerRecipientCount = (dialog) => getRecipientsFromDialogHeader(dialog).length;
@@ -252,7 +538,7 @@
       return true;
     }
     if (chipNodes(d).length > 0) return true;
-    if (emailsFromChipNodesIn(d).size > 0) return true;
+    if (recipientKeysFromChipNodesIn(d).size > 0) return true;
     if (countChips(d).toCc > 0) return true;
     return false;
   };
@@ -590,18 +876,18 @@
    * Walk from Send (or click target) up the tree; prefer the smallest ancestor with 2–24
    * recipients so we do not latch onto `body` with dozens of inbox chips (PGT / RTL-safe).
    */
-  const walkUpRecipientEmailsFrom = (start) => {
+  const walkUpRecipientKeysFrom = (start) => {
     if (!start || start.nodeType !== 1) return [];
     let best = [];
     let bestLen = Infinity;
     let bestDepth = Infinity;
     let el = start;
     for (let depth = 0; depth < 95 && el && el !== document.documentElement; depth++) {
-      const emails = [...emailsFromChipNodesIn(el)];
-      const n = emails.length;
+      const keys = [...recipientKeysFromChipNodesIn(el)];
+      const n = keys.length;
       if (n >= 2 && n <= 24) {
         if (n < bestLen || (n === bestLen && depth < bestDepth)) {
-          best = emails;
+          best = keys;
           bestLen = n;
           bestDepth = depth;
         }
@@ -611,7 +897,7 @@
     return best.length >= 2 ? best : [];
   };
 
-  const findRecipientEmailsDomWalk = (sendBtn, evtTarget) => {
+  const findRecipientKeysDomWalk = (sendBtn, evtTarget) => {
     const seeds = [];
     if (sendBtn?.nodeType === 1) seeds.push(sendBtn);
     const dlg = nearestNonExcludedDialog(sendBtn);
@@ -621,7 +907,7 @@
     }
     let best = [];
     for (const s of seeds) {
-      const arr = walkUpRecipientEmailsFrom(s);
+      const arr = walkUpRecipientKeysFrom(s);
       if (arr.length > best.length) best = arr;
     }
     return best.length >= 2 ? best : [];
@@ -710,17 +996,53 @@
 
   const effectiveRecipientCount = (composeRoot, sendBtn, evtTarget, baseToCc) => {
     if (baseToCc > 0) return baseToCc;
-    const domEmails = findRecipientEmailsDomWalk(sendBtn, evtTarget);
+    const domKeys = findRecipientKeysDomWalk(sendBtn, evtTarget);
     if (vrgDebug && baseToCc <= 1) {
-      dlog("domWalk", { count: domEmails.length, preview: domEmails.slice(0, 6) });
+      dlog("domWalk", { count: domKeys.length, preview: domKeys.slice(0, 6) });
     }
-    if (domEmails.length > 1) return domEmails.length;
+    if (domKeys.length > 1) return domKeys.length;
     let n = countRecipientsFallbackNearby(composeRoot, sendBtn);
     if (n > 1) return n;
     n = countRecipientsFallbackViewportBand(sendBtn);
     if (n > 1) return n;
     n = countRecipientsFallbackGptStyle();
     return n > 1 ? Math.min(n, 16) : 0;
+  };
+
+  /**
+   * Recompute visible recipients at send-time from current DOM (independent of prior state/focus).
+   * This catches chips/names that are not yet reflected in other heuristics.
+   */
+  const computeRecipientsNow = (composeRoot, sendBtn) => {
+    const roots = [];
+    if (composeRoot?.querySelectorAll) roots.push(composeRoot);
+
+    // Fallback: walk up from Send and scan tight ancestors for recipient tokens.
+    let el = sendBtn;
+    for (let i = 0; i < 35 && el && el !== document.body; i++) {
+      if (el.querySelectorAll) roots.push(el);
+      el = el.parentElement;
+    }
+
+    const seen = new Set();
+    for (const root of roots) {
+      for (const node of root.querySelectorAll(RECIPIENT_DOM_SEL)) {
+        if (!node || node.nodeType !== 1) continue;
+        if (node.closest("blockquote")) continue;
+        if (isBccChip(node)) continue;
+        const key = extractRecipientKeyFromElement(node);
+        if (key) seen.add(key);
+      }
+      recipientKeysFromNamedRecipientInputs(root).forEach((k) => seen.add(k));
+
+      // Aggressive fallback: raw editor values that may not have become recipient chips yet.
+      const inputs = root.querySelectorAll('input, textarea, [role="combobox"], [contenteditable="true"]');
+      for (const input of inputs) {
+        const raw = (typeof input.value === "string" ? input.value : "") || input.innerText || input.textContent || "";
+        parseRecipientKeysFromRawText(raw, "rawinput").forEach((k) => seen.add(k));
+      }
+    }
+    return seen;
   };
 
   /**
@@ -1013,7 +1335,7 @@
         ) {
           return true;
         }
-        if (emailsFromChipNodesIn(sib).size > 0) return true;
+        if (recipientKeysFromChipNodesIn(sib).size > 0) return true;
         if (countChips(sib).toCc > 0) return true;
         return !!sib.querySelector("[data-hovercard-id], [data-recipient-context]");
       };
@@ -1167,12 +1489,13 @@
     };
 
     modal.querySelector("#vrg-send-anyway").onclick = () => {
-      composeRoot.dataset.vrgForceSend = "true";
+      markForceSendOnce(composeRoot);
       remove();
       onContinue();
     };
 
     modal.querySelector("#vrg-back").onclick = () => {
+      clearForceSendOnce(composeRoot);
       remove();
     };
   };
@@ -1200,7 +1523,17 @@
     );
   };
 
-  const findSendButtonFromTarget = (target) => {
+  const findSendButtonFromTarget = (target, evt) => {
+    // Cross shadow/retargeting boundaries first.
+    const path = evt && typeof evt.composedPath === "function" ? evt.composedPath() : [];
+    for (const node of path) {
+      if (!node || node.nodeType !== 1) continue;
+      const el = node;
+      if ((el.matches?.("div[role='button']") || el.matches?.("button")) && isSendButton(el)) {
+        return el;
+      }
+    }
+
     let n = target;
     for (let i = 0; i < 22 && n; i++) {
       if (n.nodeType === 1) {
@@ -1225,6 +1558,29 @@
     return null;
   };
 
+  const findAnyVisibleSendButton = () => {
+    const candidates = Array.from(document.querySelectorAll("div[role='button'], button")).filter(
+      (el) => isSendButton(el) && isVisible(el)
+    );
+    if (!candidates.length) return null;
+    return candidates[candidates.length - 1];
+  };
+
+  const findKeyboardSendButton = () => {
+    const active = document.activeElement;
+    const fromActive = findSendButtonFromTarget(active);
+    if (fromActive) return fromActive;
+
+    const rootFromActive =
+      findComposeRootAnchored(active) || nearestNonExcludedDialog(active) || findComposeRootForConfirmFallback();
+    if (rootFromActive) {
+      const inRoot = findSendButtonInRoot(rootFromActive);
+      if (inRoot) return inRoot;
+    }
+
+    return lastSendBtn || findAnyVisibleSendButton();
+  };
+
   const tryInterceptSend = (e, sendBtn) => {
     const ev = e.type;
     dlog(ev, "send", {
@@ -1242,28 +1598,118 @@
       return;
     }
 
+    if (hasRecipientEditorFocus()) {
+      dlog(ev, "recipient editor focused — forcing full recipient evaluation");
+      commitRecipientEditorIfFocused();
+    }
+
     const composeRoot = resolveComposeRoot(sendBtn, e);
     if (!composeRoot) {
-      dlog(ev, "skip: no composeRoot", {
+      const fallbackRoot =
+        findComposeRootForConfirmFallback() || findComposeRootAnchored(sendBtn) || nearestNonExcludedDialog(sendBtn);
+      const tokenRoot = fallbackRoot || sendBtn;
+      const fallbackBaseToCc = fallbackRoot ? visibleToCcForRoot(fallbackRoot) : 0;
+      const fallbackEffectiveToCcHeuristic = effectiveRecipientCount(tokenRoot, sendBtn, e.target, fallbackBaseToCc);
+      const fallbackRecipientsNowCount = computeRecipientsNow(tokenRoot, sendBtn).size;
+      const fallbackFocusedEditorCount = recipientKeysFromFocusedEditor().size;
+      const fallbackLiveEditorCount = recipientKeysFromLiveRecipientEditors(tokenRoot).size;
+      const fallbackHeaderEmailCount = headerEmailsNearSend(sendBtn).size;
+      const fallbackFocusedSnapshotCount = getRecentFocusedSnapshotCount();
+      const fallbackEditorSnapshotCount = getRecentRecipientEditorSnapshotCount();
+      const fallbackGlobalRecipientsCount = getAllVisibleRecipientsGlobal(sendBtn).size;
+      const fallbackHeaderCount = headerEmailsNearSend(sendBtn).size;
+      const fallbackEffectiveToCc = Math.max(
+        fallbackEffectiveToCcHeuristic,
+        fallbackRecipientsNowCount,
+        fallbackFocusedEditorCount,
+        fallbackLiveEditorCount,
+        fallbackHeaderEmailCount,
+        fallbackFocusedSnapshotCount,
+        fallbackEditorSnapshotCount,
+        fallbackGlobalRecipientsCount,
+        fallbackHeaderCount
+      );
+
+      dlog(ev, "no composeRoot -> fallback", {
+        fallbackBaseToCc,
+        fallbackEffectiveToCcHeuristic,
+        fallbackRecipientsNowCount,
+        fallbackFocusedEditorCount,
+        fallbackLiveEditorCount,
+        fallbackHeaderEmailCount,
+        fallbackFocusedSnapshotCount,
+        fallbackEditorSnapshotCount,
+        fallbackGlobalRecipientsCount,
+        fallbackHeaderCount,
+        fallbackEffectiveToCc,
         ...probeDebug(null),
         composeRootProbe: probeComposeRootFailures(sendBtn)
       });
+
+      if (fallbackEffectiveToCc > 1 && consumeForceSendOnce(tokenRoot)) {
+        dlog(ev, "allow once: vrgForceSend (fallback)");
+        return;
+      }
+
+      if (fallbackEffectiveToCc > 1 && !forceSendOnceRoots.has(tokenRoot)) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        popupOpen = true;
+        lastComposeRoot = tokenRoot;
+        lastSendBtn = sendBtn;
+        createPopup(tokenRoot, () => sendBtn.click());
+      }
       return;
     }
 
     const toCc = visibleToCcForRoot(composeRoot);
-    const effectiveToCc = effectiveRecipientCount(composeRoot, sendBtn, e.target, toCc);
+    const effectiveToCcHeuristic = effectiveRecipientCount(composeRoot, sendBtn, e.target, toCc);
+    const recipientsNowCount = computeRecipientsNow(composeRoot, sendBtn).size;
+    const focusedEditorCount = recipientKeysFromFocusedEditor().size;
+    const liveEditorCount = recipientKeysFromLiveRecipientEditors(composeRoot).size;
+    const headerEmailCount = headerEmailsNearSend(sendBtn).size;
+    const focusedSnapshotCount = getRecentFocusedSnapshotCount();
+    const editorSnapshotCount = getRecentRecipientEditorSnapshotCount();
+    const globalRecipientsCount = getAllVisibleRecipientsGlobal(sendBtn).size;
+    const headerCount = headerEmailsNearSend(sendBtn).size;
+    const effectiveToCc = Math.max(
+      effectiveToCcHeuristic,
+      recipientsNowCount,
+      focusedEditorCount,
+      liveEditorCount,
+      headerEmailCount,
+      focusedSnapshotCount,
+      editorSnapshotCount,
+      globalRecipientsCount,
+      headerCount
+    );
     lastComposeRoot = composeRoot;
     lastSendBtn = sendBtn;
 
     dlog(ev, "compose", {
       toCc,
+      effectiveToCcHeuristic,
+      recipientsNowCount,
+      focusedEditorCount,
+      liveEditorCount,
+      headerEmailCount,
+      focusedSnapshotCount,
+      editorSnapshotCount,
+      globalRecipientsCount,
+      headerCount,
       effectiveToCc,
-      vrgForce: Boolean(composeRoot.dataset.vrgForceSend),
+      vrgForce: forceSendOnceRoots.has(composeRoot),
       ...probeDebug(composeRoot)
     });
 
-    if (effectiveToCc > 1 && !composeRoot.dataset.vrgForceSend) {
+    if (effectiveToCc > 1 && consumeForceSendOnce(composeRoot)) {
+      dlog(ev, "allow once: vrgForceSend");
+      // "Send anyway" should bypass warning for one send attempt only.
+      return;
+    }
+
+    if (effectiveToCc > 1 && !forceSendOnceRoots.has(composeRoot)) {
       if (toCc <= 1 && effectiveToCc > 1) {
         dlog(ev, "intercept -> show popup (recipient fallback)");
       } else {
@@ -1284,28 +1730,49 @@
 
   const onPointerDownCapture = (e) => {
     if (e.button !== 0 && e.button !== undefined) return;
-    const sendBtn = findSendButtonFromTarget(e.target);
+    captureRecipientEditorFromEventTarget(e.target);
+    snapshotFocusedRecipientsNow();
+    const sendBtn = findSendButtonFromTarget(e.target, e);
     if (!sendBtn) return;
     tryInterceptSend(e, sendBtn);
   };
 
   const onClickCapture = (e) => {
     if (e.button !== 0 && e.button !== undefined) return;
-    const sendBtn = findSendButtonFromTarget(e.target);
+    captureRecipientEditorFromEventTarget(e.target);
+    snapshotFocusedRecipientsNow();
+    const sendBtn = findSendButtonFromTarget(e.target, e);
     if (!sendBtn) return;
     tryInterceptSend(e, sendBtn);
   };
 
   const onKeyDownCapture = (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.key !== "Enter") return;
-    const sendBtn = lastSendBtn || findSendButtonFromTarget(document.activeElement);
+    const sendBtn = findKeyboardSendButton();
     if (!sendBtn) return;
     tryInterceptSend(e, sendBtn);
   };
 
+  // Capture on both window and document to beat Gmail handlers in more flows.
+  window.addEventListener("pointerdown", onPointerDownCapture, true);
+  window.addEventListener("click", onClickCapture, true);
   document.addEventListener("pointerdown", onPointerDownCapture, true);
   document.addEventListener("click", onClickCapture, true);
   document.addEventListener("keydown", onKeyDownCapture, true);
+  document.addEventListener(
+    "focusin",
+    (e) => {
+      captureRecipientEditorFromEventTarget(e.target);
+    },
+    true
+  );
+  document.addEventListener(
+    "input",
+    (e) => {
+      captureRecipientEditorFromEventTarget(e.target);
+    },
+    true
+  );
 
   const originalConfirm = window.confirm.bind(window);
   window.confirm = (message) => {
@@ -1333,9 +1800,8 @@
     const toCc = visibleToCcForRoot(composeRoot);
     const effectiveToCc = effectiveRecipientCount(composeRoot, lastSendBtn, null, toCc);
 
-    if (composeRoot.dataset.vrgForceSend === "true") {
+    if (consumeForceSendOnce(composeRoot)) {
       dlog("confirm: vrgForceSend -> native");
-      composeRoot.dataset.vrgForceSend = "";
       return originalConfirm(message);
     }
 
@@ -1344,7 +1810,7 @@
       setTimeout(() => {
         popupOpen = true;
         createPopup(composeRoot, () => {
-          composeRoot.dataset.vrgForceSend = "true";
+          markForceSendOnce(composeRoot);
           const sendBtn = findSendButtonInRoot(composeRoot) || lastSendBtn;
           if (sendBtn) sendBtn.click();
         });
