@@ -118,7 +118,7 @@
       top: "30px",
       left: "50%",
       transform: "translateX(-50%)",
-      background: "#ffffff",
+      background: "#f2f2f2",
       color: "#000",
       padding: "15px 20px",
       border: "4px solid #f00",
