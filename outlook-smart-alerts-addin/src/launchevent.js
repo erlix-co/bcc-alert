@@ -327,34 +327,90 @@ function reportDecisionMetric({ decision, visibleCount }) {
   }
 }
 
+const SMART_ALERT_DECISION_TIMEOUT_MS = 1500;
+
+function withTimeout(promise, ms, fallbackValue) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      setTimeout(() => resolve(fallbackValue), ms);
+    })
+  ]);
+}
+
+function fireAndForget(task) {
+  setTimeout(() => {
+    try {
+      Promise.resolve(task()).catch(() => {});
+    } catch (_error) {
+      // Ignore background task failures.
+    }
+  }, 0);
+}
+
 function onNewMessageComposeHandler(event) {
   event.completed({ allowEvent: true });
 }
 
 function onMessageSendHandler(event) {
-  if (!isMailboxRequirementSupported("1.12")) {
-    event.completed({ allowEvent: true });
-    return;
-  }
+  let completed = false;
+  const safeComplete = (payload) => {
+    if (completed) return;
+    completed = true;
+    event.completed(payload);
+  };
 
-  const item = Office.context.mailbox.item;
-  assessVisibleRecipients(item).then(({ effectiveVisibleCount }) => {
-    if (effectiveVisibleCount > POLICY.maxVisibleRecipients) {
-      bumpInterceptCountAsync().then((interceptTotal) => {
-        reportDecisionMetric({ decision: "blocked", visibleCount: effectiveVisibleCount });
-        event.completed({
-          allowEvent: false,
-          errorMessage: buildSmartAlertErrorMessage(getUserLanguage(), interceptTotal)
-        });
-      });
+  try {
+    if (!isMailboxRequirementSupported("1.12")) {
+      safeComplete({ allowEvent: true });
       return;
     }
-    reportDecisionMetric({ decision: "allowed", visibleCount: effectiveVisibleCount });
-    event.completed({ allowEvent: true });
-  }).catch(() => {
-    // Never leave Smart Alert unresolved, otherwise Outlook shows generic timeout/system messages.
-    event.completed({ allowEvent: true });
-  });
+
+    const item = Office?.context?.mailbox?.item;
+    if (!item?.to || !item?.cc) {
+      safeComplete({ allowEvent: true });
+      return;
+    }
+
+    withTimeout(
+      assessVisibleRecipients(item),
+      SMART_ALERT_DECISION_TIMEOUT_MS,
+      { timedOut: true, effectiveVisibleCount: 0 }
+    )
+      .then((assessment) => {
+        if (assessment?.timedOut) {
+          safeComplete({ allowEvent: true });
+          fireAndForget(() => {
+            reportDecisionMetric({ decision: "allowed", visibleCount: 0 });
+          });
+          return;
+        }
+
+        const effectiveVisibleCount = Math.max(0, Number(assessment?.effectiveVisibleCount) || 0);
+        if (effectiveVisibleCount > POLICY.maxVisibleRecipients) {
+          const interceptTotal = getInterceptCountSync() + 1;
+          safeComplete({
+            allowEvent: false,
+            errorMessage: buildSmartAlertErrorMessage(getUserLanguage(), interceptTotal)
+          });
+          fireAndForget(() => bumpInterceptCountAsync());
+          fireAndForget(() => {
+            reportDecisionMetric({ decision: "blocked", visibleCount: effectiveVisibleCount });
+          });
+          return;
+        }
+
+        safeComplete({ allowEvent: true });
+        fireAndForget(() => {
+          reportDecisionMetric({ decision: "allowed", visibleCount: effectiveVisibleCount });
+        });
+      })
+      .catch(() => {
+        safeComplete({ allowEvent: true });
+      });
+  } catch (_error) {
+    safeComplete({ allowEvent: true });
+  }
 }
 
 if (typeof Office !== "undefined") {
