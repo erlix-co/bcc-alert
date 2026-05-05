@@ -52,8 +52,16 @@ function bumpInterceptCountAsync() {
         resolve(next);
         return;
       }
-      settings.saveAsync(() => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
         resolve(next);
+      };
+      const timer = setTimeout(finish, 1200);
+      settings.saveAsync(() => {
+        clearTimeout(timer);
+        finish();
       });
     } catch (_error) {
       resolve(getInterceptCountSync() + 1);
@@ -342,6 +350,9 @@ function onMessageSendHandler(event) {
       return;
     }
     reportDecisionMetric({ decision: "allowed", visibleCount: effectiveVisibleCount });
+    event.completed({ allowEvent: true });
+  }).catch(() => {
+    // Never leave Smart Alert unresolved, otherwise Outlook shows generic timeout/system messages.
     event.completed({ allowEvent: true });
   });
 }
