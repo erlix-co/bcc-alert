@@ -119,9 +119,6 @@ function buildSmartAlertErrorMessage(lang, interceptTotal) {
         "",
         "We recommend using Bcc to protect privacy."
       ];
-  const n = Math.max(0, Math.floor(Number(interceptTotal) || 0));
-  lines.push("", formatInterceptStatsLine(isHe ? "he" : "en", n));
-  lines.push("", isHe ? "מופעל על ידי erlix.net" : "Powered by erlix.net");
   return lines.join("\n");
 }
 

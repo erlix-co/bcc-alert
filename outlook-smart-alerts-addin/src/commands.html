@@ -198,6 +198,17 @@
         font-size: 0.78rem;
         line-height: 1.45;
       }
+
+      .bcc-panel__powered-by {
+        margin-top: 12px;
+        text-align: center;
+      }
+
+      .bcc-panel__powered-by a {
+        color: var(--erlix-text-soft);
+        font-size: 0.76rem;
+        text-decoration: underline;
+      }
     </style>
   </head>
   <body class="bcc-runtime-body">
@@ -227,6 +238,9 @@
         <div id="status" class="status">…</div>
         <button id="refreshBtn" type="button"></button>
         <div id="details" class="small"></div>
+        <div class="bcc-panel__powered-by">
+          <a id="poweredByLink" href="https://erlix.net/" target="_blank" rel="noopener noreferrer"></a>
+        </div>
       </div>
     </main>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>

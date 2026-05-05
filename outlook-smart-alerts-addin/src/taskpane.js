@@ -14,7 +14,8 @@ const TEXTS = {
     groupHint: "זוהתה קבוצת תפוצה/קבוצה; ההתראה מחמירה בכוונה.",
     groupSignals: (n) => `אותות זיהוי קבוצה: ${n}`,
     notifWarning: "יותר מנמען גלוי אחד — מומלץ BCC.",
-    notifSafe: "עד נמען גלוי אחד — נראה תקין."
+    notifSafe: "עד נמען גלוי אחד — נראה תקין.",
+    poweredBy: "מופעל ע\"י erlix.net"
   },
   en: {
     title: "Attention!",
@@ -29,7 +30,8 @@ const TEXTS = {
     groupHint: "A distribution list/group was detected; warning is intentionally conservative.",
     groupSignals: (n) => `Group detection signals: ${n}`,
     notifWarning: "Multiple visible recipients — consider Bcc.",
-    notifSafe: "One or fewer visible recipients — looks fine."
+    notifSafe: "One or fewer visible recipients — looks fine.",
+    poweredBy: "Powered by erlix.net"
   }
 };
 
@@ -119,6 +121,8 @@ Office.onReady(() => {
     lead.textContent = i18n.leadBody;
   }
   document.getElementById("refreshBtn").textContent = i18n.button;
+  const poweredByLink = document.getElementById("poweredByLink");
+  if (poweredByLink) poweredByLink.textContent = i18n.poweredBy;
   document.getElementById("refreshBtn").addEventListener("click", () => {
     refreshCheck(lang);
   });
