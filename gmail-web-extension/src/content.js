@@ -111,7 +111,8 @@
       `<div style="font-size:12px;color:#555;margin-bottom:10px;">נמנעו עד כה ${String(
         blockedCount
       )} שליחות גלויות.</div>` +
-      "<button id='bcc-continue'>שלח בכל זאת</button> <button id='bcc-cancel'>חזור</button>";
+      "<button id='bcc-continue'>שלח בכל זאת</button> <button id='bcc-cancel'>חזור</button>" +
+      "<div style='margin-top:10px;font-size:12px;color:#444;'>מופעל על ידי <a href='https://erlix.net/' target='_blank' rel='noopener noreferrer' style='color:#0b57d0;text-decoration:underline;'>erlix.net</a></div>";
 
     Object.assign(popup.style, {
       position: "fixed",
