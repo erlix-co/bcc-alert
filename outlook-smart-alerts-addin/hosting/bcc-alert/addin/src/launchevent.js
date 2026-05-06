@@ -325,7 +325,8 @@ function reportDecisionMetric({ decision, visibleCount }) {
   }
 }
 
-const SMART_ALERT_DECISION_TIMEOUT_MS = 1500;
+const SMART_ALERT_DECISION_TIMEOUT_MS = 600;
+const SMART_ALERT_WATCHDOG_MS = 800;
 
 function withTimeout(promise, ms, fallbackValue) {
   return Promise.race([
@@ -355,32 +356,44 @@ function onMessageSendHandler(event) {
   const safeComplete = (payload) => {
     if (completed) return;
     completed = true;
-    event.completed(payload);
+    try {
+      event.completed(payload);
+    } catch (_error) {
+      // Swallow completion errors; nothing else can recover here.
+    }
   };
+
+  const watchdog = setTimeout(() => {
+    safeComplete({ allowEvent: true });
+  }, SMART_ALERT_WATCHDOG_MS);
 
   try {
     if (!isMailboxRequirementSupported("1.12")) {
+      clearTimeout(watchdog);
       safeComplete({ allowEvent: true });
       return;
     }
 
     const item = Office?.context?.mailbox?.item;
     if (!item?.to || !item?.cc) {
+      clearTimeout(watchdog);
       safeComplete({ allowEvent: true });
       return;
     }
 
-    withTimeout(
-      assessVisibleRecipients(item),
-      SMART_ALERT_DECISION_TIMEOUT_MS,
-      { timedOut: true, effectiveVisibleCount: 0 }
-    )
-      .then((assessment) => {
+    (async () => {
+      try {
+        const assessment = await withTimeout(
+          assessVisibleRecipients(item),
+          SMART_ALERT_DECISION_TIMEOUT_MS,
+          { timedOut: true, effectiveVisibleCount: 0 }
+        );
+
+        clearTimeout(watchdog);
+
         if (assessment?.timedOut) {
           safeComplete({ allowEvent: true });
-          fireAndForget(() => {
-            reportDecisionMetric({ decision: "allowed", visibleCount: 0 });
-          });
+          fireAndForget(() => reportDecisionMetric({ decision: "allowed", visibleCount: 0 }));
           return;
         }
 
@@ -392,21 +405,19 @@ function onMessageSendHandler(event) {
             errorMessage: buildSmartAlertErrorMessage(getUserLanguage(), interceptTotal)
           });
           fireAndForget(() => bumpInterceptCountAsync());
-          fireAndForget(() => {
-            reportDecisionMetric({ decision: "blocked", visibleCount: effectiveVisibleCount });
-          });
+          fireAndForget(() => reportDecisionMetric({ decision: "blocked", visibleCount: effectiveVisibleCount }));
           return;
         }
 
         safeComplete({ allowEvent: true });
-        fireAndForget(() => {
-          reportDecisionMetric({ decision: "allowed", visibleCount: effectiveVisibleCount });
-        });
-      })
-      .catch(() => {
+        fireAndForget(() => reportDecisionMetric({ decision: "allowed", visibleCount: effectiveVisibleCount }));
+      } catch (_error) {
+        clearTimeout(watchdog);
         safeComplete({ allowEvent: true });
-      });
+      }
+    })();
   } catch (_error) {
+    clearTimeout(watchdog);
     safeComplete({ allowEvent: true });
   }
 }
