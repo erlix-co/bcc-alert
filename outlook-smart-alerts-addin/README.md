@@ -63,9 +63,9 @@ Output folder:
 - `hosting/bcc-alert/addin`
 
 You can upload this folder to your server path:
-- `https://erlix.net/bcc-alert/addin`
+- `https://erlix.net/bcc-alert-addin/addin`
 
-This keeps your homepage `https://erlix.net/bcc-alert/` separate.
+This keeps your public homepage `https://erlix.net/bcc-alert/` separate from Outlook add-in runtime files.
 
 ## Build a production manifest (non-localhost)
 
@@ -86,10 +86,10 @@ Notes:
   - `ICON_URL` (default: `${origin}/linkcheck/logo.png`)
   - `HIGH_ICON_URL` (default: `ICON_URL`)
   - `SUPPORT_URL` (default: `${BASE_URL}/support/`)
-- Runtime telemetry posts to `{add-in base}/api/metrics` (for example `https://erlix.net/bcc-alert/addin/api/metrics` when the add-in is under `/bcc-alert/addin/`). The Erlix `home` site build includes a small dev/preview handler for that path; on a static host, failed telemetry is ignored and does not block send.
+- Runtime telemetry posts to `{add-in base}/api/metrics` (for example `https://erlix.net/bcc-alert-addin/addin/api/metrics` when the add-in is under `/bcc-alert-addin/addin/`). The Erlix add-in host can expose this endpoint for preview; on a static host, failed telemetry is ignored and does not block send.
 
 Recommended value for this project:
-- `BASE_URL=https://erlix.net/bcc-alert/addin`
+- `BASE_URL=https://erlix.net/bcc-alert-addin/addin`
 
 ## Sideload in Outlook on the web
 

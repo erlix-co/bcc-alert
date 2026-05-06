@@ -10,9 +10,9 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="BCC Alert for Outlook" />
   <Description DefaultValue="Warn before sending to multiple visible recipients (To/Cc)." />
-  <IconUrl DefaultValue="https://erlix.net/bcc-alert/addin/assets/icon-64.png" />
-  <HighResolutionIconUrl DefaultValue="https://erlix.net/bcc-alert/addin/assets/icon-128.png" />
-  <SupportUrl DefaultValue="https://erlix.net/bcc-alert/addin/support/" />
+  <IconUrl DefaultValue="https://erlix.net/bcc-alert-addin/addin/assets/icon-64.png" />
+  <HighResolutionIconUrl DefaultValue="https://erlix.net/bcc-alert-addin/addin/assets/icon-128.png" />
+  <SupportUrl DefaultValue="https://erlix.net/bcc-alert-addin/addin/support/" />
   <AppDomains>
     <AppDomain>https://erlix.net</AppDomain>
   </AppDomains>
@@ -27,7 +27,7 @@
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://erlix.net/bcc-alert/addin/src/commands.html" />
+        <SourceLocation DefaultValue="https://erlix.net/bcc-alert-addin/addin/src/commands.html" />
         <RequestedHeight>250</RequestedHeight>
       </DesktopSettings>
     </Form>
@@ -68,9 +68,9 @@
       </Hosts>
       <Resources>
         <bt:Urls>
-          <bt:Url id="Commands.Url" DefaultValue="https://erlix.net/bcc-alert/addin/src/commands.html" />
-          <bt:Url id="WebViewRuntime.Url" DefaultValue="https://erlix.net/bcc-alert/addin/src/commands.html" />
-          <bt:Url id="JSRuntime.Url" DefaultValue="https://erlix.net/bcc-alert/addin/src/launchevent.js" />
+          <bt:Url id="Commands.Url" DefaultValue="https://erlix.net/bcc-alert-addin/addin/src/commands.html" />
+          <bt:Url id="WebViewRuntime.Url" DefaultValue="https://erlix.net/bcc-alert-addin/addin/src/commands.html" />
+          <bt:Url id="JSRuntime.Url" DefaultValue="https://erlix.net/bcc-alert-addin/addin/src/launchevent.js" />
         </bt:Urls>
       </Resources>
     </VersionOverrides>

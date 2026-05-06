@@ -17,11 +17,11 @@ Requested details:
 
 4) What we validated
 - Runtime URLs are public HTTPS and return 200:
-  - https://erlix.net/bcc-alert/addin/src/commands.html
-  - https://erlix.net/bcc-alert/addin/src/launchevent.js
-  - https://erlix.net/bcc-alert/addin/assets/icon-64.png
-  - https://erlix.net/bcc-alert/addin/assets/icon-128.png
-  - https://erlix.net/bcc-alert/addin/support/
+  - https://erlix.net/bcc-alert-addin/addin/src/commands.html
+  - https://erlix.net/bcc-alert-addin/addin/src/launchevent.js
+  - https://erlix.net/bcc-alert-addin/addin/assets/icon-64.png
+  - https://erlix.net/bcc-alert-addin/addin/assets/icon-128.png
+  - https://erlix.net/bcc-alert-addin/addin/support/
 - Manifest validates successfully with office-addin-manifest validator.
 - OwaMailboxPolicy OnSendAddinsEnabled is True.
 - Diagnostic manifest without OnMessageSend uploads successfully.

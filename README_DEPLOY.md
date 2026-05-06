@@ -1,112 +1,65 @@
 # BCC Alert Add-in — Deployment Structure
 
-## Overview
+## Critical Separation
 
-This project contains two separate layers:
+There are two different public paths and they must never be mixed:
 
-1. Development source code
-2. Production bundle (served to Outlook)
+- `https://erlix.net/bcc-alert/` = public marketing/product website
+- `https://erlix.net/bcc-alert-addin/` = Outlook add-in hosting root
 
-It is critical to understand the difference.
+Outlook production files are served only from:
 
----
+- `https://erlix.net/bcc-alert-addin/addin/`
 
-## Source Code (DO NOT SERVE DIRECTLY)
+## Source vs Production
 
-Path:
-outlook-smart-alerts-addin/src/
+Source code (edit here):
 
-Description:
-This is the development source code.
+- `outlook-smart-alerts-addin/src/`
 
-- This is where changes should be made
-- This code is NOT served directly to Outlook
-- Changes here require a build step
+Built bundle (deploy this):
 
----
+- `outlook-smart-alerts-addin/hosting\bcc-alert\addin\` (local build output folder)
 
-## Production Bundle (USED BY OUTLOOK)
+Outlook never loads directly from `src/`.
 
-Path:
-outlook-smart-alerts-addin/hosting/bcc-alert/addin/
+## Production URLs (must resolve)
 
-This folder contains the built version of the add-in.
+- `https://erlix.net/bcc-alert-addin/addin/src/commands.html`
+- `https://erlix.net/bcc-alert-addin/addin/src/launchevent.js`
+- `https://erlix.net/bcc-alert-addin/addin/assets/icon-64.png`
+- `https://erlix.net/bcc-alert-addin/addin/assets/icon-128.png`
+- `https://erlix.net/bcc-alert-addin/addin/support/`
 
-This is the ONLY code that Outlook actually loads.
+## NGINX Routing Contract
 
----
+- `/bcc-alert/` serves only the public site
+- `/bcc-alert-addin/` serves only Outlook add-in files
 
-## Public URL (Served by NGINX)
-
-The production bundle is exposed via NGINX at:
-
-https://erlix.net/bcc-alert/
-
-Example:
-https://erlix.net/bcc-alert/addin/src/launchevent.js
-
-This maps to:
-
-/var/www/bcc-alert/addin/
-
----
-
-## Critical Rule
-
-Outlook NEVER uses files from the src/ folder directly.
-
-It ONLY loads files from:
-
-outlook-smart-alerts-addin/hosting/bcc-alert/addin/
-
----
+Do not route legacy public-site add-in paths to runtime content.
 
 ## Build & Deploy Flow
 
-When making changes:
+1. Edit files under `outlook-smart-alerts-addin/src/`
+2. Build bundle: `npm run hosting:build`
+3. Build production manifest with:
+   - `BASE_URL=https://erlix.net/bcc-alert-addin/addin`
+   - `npm run manifest:build`
+4. Deploy bundle contents to server path used by `/bcc-alert-addin/addin/`
+5. Reload/restart NGINX if needed
+6. Restart Outlook clients (cache)
 
-1. Modify files under:
-   outlook-smart-alerts-addin/src/
+## Verification Checklist
 
-2. Build the hosting bundle:
-   npm run hosting:build
-
-3. Deploy to web directory:
-   Copy contents to:
-   /var/www/bcc-alert/
-
-4. Restart / reload NGINX if needed
-
-5. Restart Outlook to clear cache
-
----
-
-## Important Warnings
-
-- Updating src/ without rebuilding hosting bundle will NOT affect Outlook
-- If the production URL returns 404 or 403, the add-in will break
-- Outlook aggressively caches files — restart Outlook after deploy
-- Always verify changes via browser:
-  https://erlix.net/bcc-alert/addin/src/launchevent.js
-
----
+- Open `https://erlix.net/bcc-alert-addin/addin/src/launchevent.js` in browser and verify latest code.
+- Confirm no production reference points to the old public-site add-in path.
+- Confirm add-in manifest URLs all point to `/bcc-alert-addin/addin/`.
 
 ## For AI Agents (Cursor / Automation)
 
-NEVER assume src/ is used in production.
-
-ALWAYS ensure:
-
-- Changes are reflected in hosting/bcc-alert/addin/
-- Files are accessible via:
-  https://erlix.net/bcc-alert/
-
-Failure to do so will result in outdated code being used in Outlook.
-
----
-
-## Summary
-
-Source → Build → Hosting → NGINX → Outlook
-
-ONLY the hosting bundle is used in production.
+- Never deploy add-in runtime under `/bcc-alert/`.
+- Never assume the public BCC website path hosts add-in runtime files.
+- Always keep source/build/deploy separation:
+  - source: `src/`
+  - bundle: `hosting\bcc-alert\addin\`
+  - production URL root: `https://erlix.net/bcc-alert-addin/addin/`

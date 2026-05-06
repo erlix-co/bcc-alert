@@ -10,7 +10,7 @@ const outputPath = path.join(projectRoot, "manifest.production.xml");
 const rawBaseUrl = process.env.BASE_URL;
 
 if (!rawBaseUrl) {
-  process.stderr.write("Missing BASE_URL. Example: BASE_URL=https://erlix.net/bcc-alert node tools/build-manifest.js\n");
+  process.stderr.write("Missing BASE_URL. Example: BASE_URL=https://erlix.net/bcc-alert-addin/addin node tools/build-manifest.js\n");
   process.exit(1);
 }
 
