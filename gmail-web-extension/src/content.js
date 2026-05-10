@@ -33,6 +33,37 @@
     return blockedCountCache;
   };
 
+  function isChipUiVisible(el) {
+    if (!(el instanceof Element)) return false;
+    if (typeof el.getClientRects !== "function") return false;
+    const rects = el.getClientRects();
+    if (!rects || rects.length === 0) return false;
+    const st = window.getComputedStyle(el);
+    if (st.display === "none" || st.visibility === "hidden") return false;
+    const op = parseFloat(st.opacity === "" ? "1" : st.opacity);
+    if (op < 0.05) return false;
+    return true;
+  }
+
+  /** Avoid double-counting when Gmail leaves duplicate chip nodes for the same address. */
+  function uniqChipsByRecipientKey(chips) {
+    const seen = new Set();
+    const out = [];
+    for (const el of chips) {
+      const key = String(el.getAttribute?.("email") || el.getAttribute?.("data-hovercard-id") || "")
+        .trim()
+        .toLowerCase();
+      if (!key) {
+        out.push(el);
+        continue;
+      }
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(el);
+    }
+    return out;
+  }
+
   function isBccChip(el) {
     let current = el;
     for (let i = 0; i < 12 && current; i++) {
@@ -44,6 +75,8 @@
       // Prefer structural hints first.
       if (name === "bcc" || dataName === "bcc") return true;
       if (/^\s*(bcc|עותק מוסתר)\s*:?\s*$/i.test(aria)) return true;
+      // Gmail labels the Bcc row/field as "Bcc" or "Bcc - user@…" (not only exact-match strings).
+      if (/\b(bcc|עותק מוסתר)\b/i.test(aria)) return true;
 
       // Text fallback: strict label match only (no broad includes that misclassifies To/Cc rows).
       if (/^\s*(bcc|עותק מוסתר)\s*:?\s*$/i.test(text)) return true;
@@ -54,43 +87,24 @@
 
   function countChips(dialog) {
     // Keep base selector behavior (proven stable in user's environment)
-    const all = Array.from(dialog.querySelectorAll("span[email][data-hovercard-id]"));
+    const all = uniqChipsByRecipientKey(
+      Array.from(dialog.querySelectorAll("span[email][data-hovercard-id]")).filter(isChipUiVisible)
+    );
     const visible = all.filter((el) => !isBccChip(el));
     const bccOnly = all.length - visible.length;
     if (visible.length > 1) return { toCc: visible.length, bcc: bccOnly };
+    // When Gmail shows at least one real To/Cc chip, trust that count. A broad [data-hovercard-id]
+    // scan would also match thread/message cards in Reply and falsely trip multi-recipient warnings.
+    if (visible.length > 0) return { toCc: visible.length, bcc: bccOnly };
 
     // Minimal fallback for "Reply all" layouts where chips are not span[email][data-hovercard-id].
-    const anyHover = Array.from(dialog.querySelectorAll("[data-hovercard-id]"));
+    const anyHover = uniqChipsByRecipientKey(
+      Array.from(dialog.querySelectorAll("[data-hovercard-id]")).filter(isChipUiVisible)
+    );
     const anyVisible = anyHover.filter((el) => !isBccChip(el));
     const anyBccOnly = anyHover.length - anyVisible.length;
     if (anyVisible.length > 1) return { toCc: anyVisible.length, bcc: anyBccOnly };
-
-    // Next fallback: unique recipient keys from multiple Gmail surfaces.
-    const keySet = new Set();
-    const allNodes = dialog.querySelectorAll("[email], [data-hovercard-id], [data-recipient-context], a[href^='mailto:']");
-    for (const el of allNodes) {
-      if (!el || el.nodeType !== 1) continue;
-      if (isBccChip(el)) continue;
-      let key = String(el.getAttribute("email") || "").trim().toLowerCase();
-      if (!key) key = String(el.getAttribute("data-hovercard-id") || "").trim().toLowerCase();
-      if (!key) {
-        const href = String(el.getAttribute("href") || "").trim();
-        if (/^mailto:/i.test(href)) {
-          key = decodeURIComponent((href.slice(7).split("?")[0] || "").trim()).toLowerCase();
-        }
-      }
-      if (!key) {
-        key = String(el.getAttribute("data-recipient-context") || "").trim().toLowerCase();
-      }
-      if (!key) {
-        key = String(el.innerText || el.textContent || "").trim().toLowerCase();
-      }
-      if (!key) continue;
-      keySet.add(key);
-    }
-
-    const fallbackToCc = Math.max(visible.length, anyVisible.length, keySet.size);
-    return { toCc: fallbackToCc, bcc: Math.max(bccOnly, anyBccOnly) };
+    return { toCc: Math.max(visible.length, anyVisible.length), bcc: Math.max(bccOnly, anyBccOnly) };
   }
 
   function removePopup() {
@@ -191,11 +205,38 @@
 
   function resolveComposeContainer(sendBtn) {
     if (!sendBtn || sendBtn.nodeType !== 1) return null;
+
+    // Prefer the tightest compose scope around this send button (prevents counting thread recipients in Reply).
+    let bestScope = null;
+    let bestArea = Infinity;
+    let cur = sendBtn;
+    for (let i = 0; i < 40 && cur; i++) {
+      if (cur.querySelector) {
+        const hasComposeBody = !!cur.querySelector("div[role='textbox'][g_editable='true']");
+        const hasActionButtons = !!cur.querySelector("div[role='button'], button");
+        const hasRecipientSignals = !!cur.querySelector(
+          "span[email][data-hovercard-id], [data-hovercard-id], [email], [data-recipient-context], a[href^='mailto:']"
+        );
+        if (hasComposeBody && hasActionButtons && hasRecipientSignals) {
+          const r = cur.getBoundingClientRect?.();
+          if (r && r.width > 120 && r.height > 80) {
+            const area = r.width * r.height;
+            if (area < bestArea) {
+              bestArea = area;
+              bestScope = cur;
+            }
+          }
+        }
+      }
+      cur = cur.parentElement;
+    }
+    if (bestScope) return bestScope;
+
     const dialog = sendBtn.closest("div[role='dialog']");
     if (dialog) return dialog;
 
     // Reply/Forward inline compose is often not wrapped in role=dialog.
-    let cur = sendBtn;
+    cur = sendBtn;
     for (let i = 0; i < 35 && cur; i++) {
       if (
         cur.querySelector?.("span[email][data-hovercard-id]") &&
