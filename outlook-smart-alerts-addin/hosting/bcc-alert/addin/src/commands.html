@@ -127,18 +127,26 @@
         white-space: pre-line;
       }
 
-      .bcc-panel__stats {
+      .erlix-subscription-banner {
+        display: block;
         margin: 0 0 var(--erlix-space-3);
-        font-size: 0.85rem;
-        font-weight: 500;
-        line-height: 1.5;
-        color: var(--erlix-text);
+        padding: 10px 12px;
+        border-radius: var(--erlix-radius-sm);
+        font-size: 0.82rem;
+        font-weight: 600;
+        line-height: 1.45;
       }
 
-      .bcc-panel__stat-number {
-        font-weight: 700;
-        font-variant-numeric: tabular-nums;
-        color: var(--erlix-accent-red);
+      .erlix-subscription-banner--expiring {
+        color: #3b2f04;
+        background: rgba(255, 214, 102, 0.95);
+        border: 1px solid rgba(184, 134, 11, 0.45);
+      }
+
+      .erlix-subscription-banner--expired {
+        color: #ffecec;
+        background: rgba(120, 28, 28, 0.92);
+        border: 1px solid rgba(255, 120, 120, 0.35);
       }
 
       .status {
@@ -232,9 +240,9 @@
     </a>
     <main class="bcc-panel">
       <div class="bcc-panel__content">
+        <div id="erlixSubscriptionBanner" class="erlix-subscription-banner" hidden aria-live="polite"></div>
         <h1 id="title" class="bcc-panel__title">BCC Alert</h1>
         <p id="lead" class="bcc-panel__lead"></p>
-        <p id="statsLine" class="bcc-panel__stats" aria-live="polite"></p>
         <div id="status" class="status">…</div>
         <button id="refreshBtn" type="button"></button>
         <div id="details" class="small"></div>
@@ -244,6 +252,7 @@
       </div>
     </main>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <script src="./licensing/LicenseManager.js"></script>
     <script src="./launchevent.js"></script>
     <script src="./taskpane.js" defer></script>
   </body>

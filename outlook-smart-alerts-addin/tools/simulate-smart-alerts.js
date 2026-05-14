@@ -5,9 +5,37 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 const roamingStore = {};
 
+global.localStorage = {
+  _data: Object.create(null),
+  getItem(key) {
+    return Object.prototype.hasOwnProperty.call(this._data, key) ? this._data[key] : null;
+  },
+  setItem(key, value) {
+    this._data[String(key)] = String(value);
+  },
+  removeItem(key) {
+    delete this._data[String(key)];
+  }
+};
+
+global.fetch = async () => ({
+  ok: true,
+  status: 200,
+  text: async () =>
+    JSON.stringify({
+      status: "active",
+      expiresAt: "2026-12-31T00:00:00Z"
+    })
+});
+
 global.Office = {
   AsyncResultStatus: {
     Succeeded: "succeeded"
+  },
+  MailboxEnums: {
+    ItemNotificationMessageType: {
+      InformationalMessage: "informationalMessage"
+    }
   },
   context: {
     displayLanguage: "he-IL",
@@ -28,6 +56,9 @@ global.Office = {
       }
     },
     mailbox: {
+      userProfile: {
+        emailAddress: "simulator@example.com"
+      },
       item: null
     }
   },
@@ -37,6 +68,9 @@ global.Office = {
   }
 };
 
+global.window = global;
+
+require("../src/licensing/LicenseManager");
 const { onMessageSendHandler } = require("../src/launchevent");
 
 function makeField(recipients) {
@@ -55,7 +89,11 @@ function runScenario(name, { to, cc, bcc }) {
     Office.context.mailbox.item = {
       to: makeField(to),
       cc: makeField(cc),
-      bcc: makeField(bcc)
+      bcc: makeField(bcc),
+      notificationMessages: {
+        replaceAsync() {},
+        removeAsync() {}
+      }
     };
 
     onMessageSendHandler({
@@ -78,16 +116,35 @@ async function main() {
     bcc: []
   });
 
-  await runScenario("תרחיש 2 - שני נמענים ומעלה ב-To/Cc", {
+  await runScenario("תרחיש 2 - שני נמענים ומעלה ב-To/Cc (רישוי פעיל → חסימה)", {
     to: [{ emailAddress: "one@example.com" }],
     cc: [{ emailAddress: "two@example.com" }],
     bcc: []
   });
 
-  await runScenario("תרחיש 2ב - חסימה נוספת (מונה מצטבר אמור להיות 2)", {
+  const { getErlixLicenseManager } = require("../src/licensing/LicenseManager");
+  const licenseManager = getErlixLicenseManager();
+  const originalResolveState = licenseManager.resolveState.bind(licenseManager);
+  licenseManager.resolveState = async () => {
+    licenseManager._resolved = { status: "expired" };
+    return licenseManager._resolved;
+  };
+
+  await runScenario("תרחיש 2ג - רישוי פג + שני נמענים → חייב לאפשר שליחה (ללא חסימה)", {
     to: [{ emailAddress: "one@example.com" }],
     cc: [{ emailAddress: "two@example.com" }],
     bcc: []
+  });
+
+  licenseManager.resolveState = originalResolveState;
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () =>
+      JSON.stringify({
+        status: "active",
+        expiresAt: "2026-12-31T00:00:00Z"
+      })
   });
 
   await runScenario("תרחיש 3 - Bcc בלבד", {

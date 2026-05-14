@@ -1,110 +1,32 @@
-/* global Office */
+/* global Office, getErlixLicenseManager */
+
+/**
+ * Smart Alerts runtime: visible-recipient protection (Mailbox 1.12+).
+ *
+ * Subscription gating runs *before* any recipient assessment. When license is not
+ * protection-active, this module must not scan, block, or call `event.completed({ allowEvent: false })`.
+ *
+ * Logging prefixes: [PROTECTION], [SUBSCRIPTION] (compose-time subscription UI only).
+ */
 
 const POLICY = {
   maxVisibleRecipients: 1
 };
 
-/** Roaming key: cumulative count of send attempts blocked by visible-recipient policy (per mailbox). */
-const ROAMING_INTERCEPT_COUNT_KEY = "bccAlertVisibleSendInterceptCount";
-
-function getInterceptCountSync() {
+/** Returns the shared license manager, or null if the licensing script did not load. */
+function getLicenseManagerSafe() {
   try {
-    const settings = Office?.context?.roamingSettings;
-    if (!settings?.get) return 0;
-    return Math.max(0, Math.floor(Number(settings.get(ROAMING_INTERCEPT_COUNT_KEY)) || 0));
+    if (typeof getErlixLicenseManager === "function") {
+      return getErlixLicenseManager();
+    }
   } catch (_error) {
-    return 0;
+    /* ignore */
   }
+  console.log("[LICENSE] LicenseManager unavailable — treating as no protection (fail-open send)");
+  return null;
 }
 
-function bumpInterceptCountSync() {
-  try {
-    const settings = Office?.context?.roamingSettings;
-    if (!settings?.get || !settings?.set) {
-      return getInterceptCountSync() + 1;
-    }
-    const next = getInterceptCountSync() + 1;
-    settings.set(ROAMING_INTERCEPT_COUNT_KEY, next);
-    if (typeof settings.saveAsync === "function") {
-      settings.saveAsync(() => {});
-    }
-    return next;
-  } catch (_error) {
-    return getInterceptCountSync() + 1;
-  }
-}
-
-/**
- * Persists intercept count then resolves — required before `event.completed` in OnMessageSend,
- * otherwise the runtime may tear down before `roamingSettings.saveAsync` finishes (counter stuck at 1).
- */
-function bumpInterceptCountAsync() {
-  return new Promise((resolve) => {
-    try {
-      const settings = Office?.context?.roamingSettings;
-      if (!settings?.get || !settings?.set) {
-        resolve(getInterceptCountSync() + 1);
-        return;
-      }
-      const next = getInterceptCountSync() + 1;
-      settings.set(ROAMING_INTERCEPT_COUNT_KEY, next);
-      if (typeof settings.saveAsync !== "function") {
-        resolve(next);
-        return;
-      }
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        resolve(next);
-      };
-      const timer = setTimeout(finish, 1200);
-      settings.saveAsync(() => {
-        clearTimeout(timer);
-        finish();
-      });
-    } catch (_error) {
-      resolve(getInterceptCountSync() + 1);
-    }
-  });
-}
-
-function getInterceptStatsDisplayParts(lang, count) {
-  const n = Math.max(0, Math.floor(Number(count) || 0));
-  if (lang === "he") {
-    if (n === 1) {
-      return {
-        before: "עד היום נמנע ממך ",
-        numberText: "1",
-        after: " ניסיון שליחה גלויה למספר נמענים."
-      };
-    }
-    return {
-      before: "עד היום נמנעו ממך ",
-      numberText: String(n),
-      after: " פעמים שליחה גלויה למספר נמענים."
-    };
-  }
-  if (n === 1) {
-    return {
-      before: "So far, you have been protected from ",
-      numberText: "1",
-      after: " risky visible multi-recipient send."
-    };
-  }
-  return {
-    before: "So far, you have been protected from ",
-    numberText: String(n),
-    after: " risky visible multi-recipient sends."
-  };
-}
-
-function formatInterceptStatsLine(lang, count) {
-  const { before, numberText, after } = getInterceptStatsDisplayParts(lang, count);
-  return `${before}${numberText}${after}`;
-}
-
-function buildSmartAlertErrorMessage(lang, interceptTotal) {
+function buildSmartAlertErrorMessage(lang) {
   const isHe = lang === "he";
   const lines = isHe
     ? [
@@ -326,7 +248,8 @@ function reportDecisionMetric({ decision, visibleCount }) {
 }
 
 const SMART_ALERT_DECISION_TIMEOUT_MS = 600;
-const SMART_ALERT_WATCHDOG_MS = 800;
+/** Covers license fetch (≤5s) plus recipient assessment window. */
+const SMART_ALERT_WATCHDOG_MS = 7000;
 
 function withTimeout(promise, ms, fallbackValue) {
   return Promise.race([
@@ -347,8 +270,103 @@ function fireAndForget(task) {
   }, 0);
 }
 
+const NOTIF_KEY_SUB_EXPIRING = "ErlixSubscriptionExpiringSoon";
+const NOTIF_KEY_SUB_INACTIVE = "ErlixSubscriptionInactive";
+const NOTIFICATION_KEY_VISIBLE_RECIPIENTS = "BCCAlertVisibleRecipients";
+
+function subscriptionComposeMessage(lang, lm) {
+  if (!lm?.isExpiringSoon()) return null;
+  const days = lm.getDaysLeft();
+  const n = days !== null ? days : "?";
+  if (lang === "he") {
+    return `תוקף ההגנה של Erlix יפוג בעוד ${n} ימים.`;
+  }
+  return `Your Erlix protection expires in ${n} days.`;
+}
+
+/**
+ * Non-blocking compose-time subscription notices only (no send interception).
+ */
+function applyComposeSubscriptionNotices(lang) {
+  const item = Office?.context?.mailbox?.item;
+  if (!item?.notificationMessages?.replaceAsync) return;
+
+  const lm = getLicenseManagerSafe();
+  if (!lm) return;
+
+  const removeKeys = (keys) => {
+    keys.forEach((key) => {
+      try {
+        if (item.notificationMessages.removeAsync) {
+          item.notificationMessages.removeAsync(key);
+        }
+      } catch (_e) {
+        /* ignore */
+      }
+    });
+  };
+
+  try {
+    if (typeof lm.isOfflineGrace === "function" && lm.isOfflineGrace() && lm.isProtectionActive()) {
+      removeKeys([NOTIF_KEY_SUB_EXPIRING, NOTIF_KEY_SUB_INACTIVE]);
+      console.log("[SUBSCRIPTION] compose: subscription notices suppressed (offline grace)");
+      return;
+    }
+
+    if (lm.isExpired()) {
+      removeKeys([NOTIF_KEY_SUB_EXPIRING, NOTIFICATION_KEY_VISIBLE_RECIPIENTS]);
+      const msg =
+        lang === "he"
+          ? "ההגנה של Erlix אינה פעילה. פג תוקף המנוי."
+          : "Erlix protection inactive. Your subscription has expired.";
+      console.log("[SUBSCRIPTION] compose: showing inactive notice (informational only)");
+      item.notificationMessages.replaceAsync(NOTIF_KEY_SUB_INACTIVE, {
+        type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
+        message: msg,
+        persistent: false
+      });
+      return;
+    }
+
+    removeKeys([NOTIF_KEY_SUB_INACTIVE, NOTIFICATION_KEY_VISIBLE_RECIPIENTS]);
+
+    if (lm.isExpiringSoon()) {
+      const message = subscriptionComposeMessage(lang, lm);
+      if (message) {
+        console.log("[SUBSCRIPTION] compose: showing expiring-soon notice");
+        item.notificationMessages.replaceAsync(NOTIF_KEY_SUB_EXPIRING, {
+          type: Office.MailboxEnums.ItemNotificationMessageType.InformationalMessage,
+          message,
+          persistent: false
+        });
+      }
+      return;
+    }
+
+    removeKeys([NOTIF_KEY_SUB_EXPIRING, NOTIF_KEY_SUB_INACTIVE, NOTIFICATION_KEY_VISIBLE_RECIPIENTS]);
+  } catch (error) {
+    console.log("[SUBSCRIPTION] compose notification failed (non-fatal)", error?.message || error);
+  }
+}
+
 function onNewMessageComposeHandler(event) {
-  event.completed({ allowEvent: true });
+  try {
+    event.completed({ allowEvent: true });
+  } catch (_error) {
+    /* ignore */
+  }
+
+  fireAndForget(async () => {
+    try {
+      const lm = getLicenseManagerSafe();
+      if (!lm) return;
+      await lm.resolveState();
+      const lang = getUserLanguage();
+      applyComposeSubscriptionNotices(lang);
+    } catch (error) {
+      console.log("[SUBSCRIPTION] compose license decorate failed (non-fatal)", error?.message || error);
+    }
+  });
 }
 
 function onMessageSendHandler(event) {
@@ -364,6 +382,7 @@ function onMessageSendHandler(event) {
   };
 
   const watchdog = setTimeout(() => {
+    console.log("[PROTECTION] watchdog fired — fail-open allow send");
     safeComplete({ allowEvent: true });
   }, SMART_ALERT_WATCHDOG_MS);
 
@@ -383,6 +402,22 @@ function onMessageSendHandler(event) {
 
     (async () => {
       try {
+        const lm = getLicenseManagerSafe();
+        if (!lm) {
+          clearTimeout(watchdog);
+          safeComplete({ allowEvent: true });
+          return;
+        }
+
+        await lm.resolveState();
+        if (!lm.isProtectionActive()) {
+          console.log("[LICENSE] not protection-active — skipping scan/block (fail-open send)");
+          console.log("[PROTECTION] recipient enforcement skipped due to license state");
+          clearTimeout(watchdog);
+          safeComplete({ allowEvent: true });
+          return;
+        }
+
         const assessment = await withTimeout(
           assessVisibleRecipients(item),
           SMART_ALERT_DECISION_TIMEOUT_MS,
@@ -392,6 +427,7 @@ function onMessageSendHandler(event) {
         clearTimeout(watchdog);
 
         if (assessment?.timedOut) {
+          console.log("[PROTECTION] assessment timed out — allow send");
           safeComplete({ allowEvent: true });
           fireAndForget(() => reportDecisionMetric({ decision: "allowed", visibleCount: 0 }));
           return;
@@ -399,24 +435,26 @@ function onMessageSendHandler(event) {
 
         const effectiveVisibleCount = Math.max(0, Number(assessment?.effectiveVisibleCount) || 0);
         if (effectiveVisibleCount > POLICY.maxVisibleRecipients) {
-          const interceptTotal = getInterceptCountSync() + 1;
+          console.log("[PROTECTION] blocking send (policy)", { effectiveVisibleCount });
           safeComplete({
             allowEvent: false,
-            errorMessage: buildSmartAlertErrorMessage(getUserLanguage(), interceptTotal)
+            errorMessage: buildSmartAlertErrorMessage(getUserLanguage())
           });
-          fireAndForget(() => bumpInterceptCountAsync());
           fireAndForget(() => reportDecisionMetric({ decision: "blocked", visibleCount: effectiveVisibleCount }));
           return;
         }
 
+        console.log("[PROTECTION] allow send (policy pass)", { effectiveVisibleCount });
         safeComplete({ allowEvent: true });
         fireAndForget(() => reportDecisionMetric({ decision: "allowed", visibleCount: effectiveVisibleCount }));
-      } catch (_error) {
+      } catch (error) {
+        console.log("[PROTECTION] handler error — fail-open allow", error?.message || error);
         clearTimeout(watchdog);
         safeComplete({ allowEvent: true });
       }
     })();
-  } catch (_error) {
+  } catch (error) {
+    console.log("[PROTECTION] sync error — fail-open allow", error?.message || error);
     clearTimeout(watchdog);
     safeComplete({ allowEvent: true });
   }
@@ -434,12 +472,6 @@ if (typeof Office !== "undefined") {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    ROAMING_INTERCEPT_COUNT_KEY,
-    getInterceptCountSync,
-    bumpInterceptCountSync,
-    bumpInterceptCountAsync,
-    getInterceptStatsDisplayParts,
-    formatInterceptStatsLine,
     buildSmartAlertErrorMessage,
     getRecipientsAsync,
     countVisibleRecipients,
@@ -453,6 +485,9 @@ if (typeof module !== "undefined" && module.exports) {
     getMetricsEndpoint,
     reportDecisionMetric,
     onNewMessageComposeHandler,
-    onMessageSendHandler
+    onMessageSendHandler,
+    NOTIF_KEY_SUB_EXPIRING,
+    NOTIF_KEY_SUB_INACTIVE,
+    applyComposeSubscriptionNotices
   };
 }

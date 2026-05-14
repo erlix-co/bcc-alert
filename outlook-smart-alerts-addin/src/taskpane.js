@@ -1,4 +1,9 @@
-/* global Office, assessVisibleRecipients, reportDecisionMetric, getUserLanguage, isMailboxRequirementSupported, getInterceptCountSync, getInterceptStatsDisplayParts */
+/* global Office, assessVisibleRecipients, reportDecisionMetric, getUserLanguage, isMailboxRequirementSupported, getErlixLicenseManager */
+
+/**
+ * Task pane: recipient status when protection is active; subscription banners; no send interception.
+ * Logging prefix: [SUBSCRIPTION] for license UI; [PROTECTION] for assessment logs where relevant.
+ */
 
 const TEXTS = {
   he: {
@@ -15,7 +20,12 @@ const TEXTS = {
     groupSignals: (n) => `אותות זיהוי קבוצה: ${n}`,
     notifWarning: "יותר מנמען גלוי אחד — מומלץ BCC.",
     notifSafe: "עד נמען גלוי אחד — נראה תקין.",
-    poweredBy: "מופעל ע\"י erlix.net"
+    poweredBy: "מופעל ע\"י erlix.net",
+    subscriptionExpiring: (days) =>
+      `תוקף ההגנה של Erlix יפוג בעוד ${days} ימים.`,
+    subscriptionInactive: "ההגנה של Erlix אינה פעילה. פג תוקף המנוי.",
+    protectionInactiveBody:
+      "ההגנה של Erlix אינה פעילה כרגע (מנוי פג או אין אימות רישוי). השליחה לא נבדקת על ידי התוסף."
   },
   en: {
     title: "Attention!",
@@ -31,7 +41,11 @@ const TEXTS = {
     groupSignals: (n) => `Group detection signals: ${n}`,
     notifWarning: "Multiple visible recipients — consider Bcc.",
     notifSafe: "One or fewer visible recipients — looks fine.",
-    poweredBy: "Powered by erlix.net"
+    poweredBy: "Powered by erlix.net",
+    subscriptionExpiring: (days) => `Your Erlix protection expires in ${days} days.`,
+    subscriptionInactive: "Erlix protection inactive. Your subscription has expired.",
+    protectionInactiveBody:
+      "Erlix protection is inactive (subscription expired or license could not be validated). This add-in is not checking your sends."
   }
 };
 
@@ -40,27 +54,66 @@ const NOTIFICATION_KEY = "BCCAlertVisibleRecipients";
 
 let lastAssessmentSignature = "";
 
+function getLicenseManagerSafe() {
+  try {
+    if (typeof getErlixLicenseManager === "function") {
+      return getErlixLicenseManager();
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+  return null;
+}
+
+function setSubscriptionBanner(lang, lm) {
+  const el = document.getElementById("erlixSubscriptionBanner");
+  if (!el) return;
+
+  if (!lm) {
+    el.hidden = true;
+    el.textContent = "";
+    el.className = "erlix-subscription-banner";
+    return;
+  }
+
+  if (typeof lm.isOfflineGrace === "function" && lm.isOfflineGrace() && lm.isProtectionActive()) {
+    el.hidden = true;
+    el.textContent = "";
+    el.className = "erlix-subscription-banner";
+    console.log("[SUBSCRIPTION] banner: hidden (offline grace, no subscription scare UI)");
+    return;
+  }
+
+  if (lm.isExpired()) {
+    el.hidden = false;
+    el.className = "erlix-subscription-banner erlix-subscription-banner--expired";
+    el.textContent = TEXTS[lang]?.subscriptionInactive || TEXTS.en.subscriptionInactive;
+    console.log("[SUBSCRIPTION] banner: EXPIRED (inactive protection)");
+    return;
+  }
+
+  if (lm.isExpiringSoon()) {
+    const days = lm.getDaysLeft();
+    const d = days !== null ? days : "?";
+    el.hidden = false;
+    el.className = "erlix-subscription-banner erlix-subscription-banner--expiring";
+    el.textContent =
+      typeof TEXTS[lang]?.subscriptionExpiring === "function"
+        ? TEXTS[lang].subscriptionExpiring(d)
+        : TEXTS.en.subscriptionExpiring(d);
+    console.log("[SUBSCRIPTION] banner: EXPIRING_SOON");
+    return;
+  }
+
+  el.hidden = true;
+  el.textContent = "";
+  el.className = "erlix-subscription-banner";
+}
+
 function setStatus(text, isWarning) {
   const status = document.getElementById("status");
   status.textContent = text;
   status.className = `status ${isWarning ? "warn" : "ok"}`;
-}
-
-function renderStatsLine(lang) {
-  const statsLine = document.getElementById("statsLine");
-  if (!statsLine) return;
-  if (typeof getInterceptStatsDisplayParts !== "function" || typeof getInterceptCountSync !== "function") {
-    statsLine.textContent = "";
-    return;
-  }
-  const parts = getInterceptStatsDisplayParts(lang, getInterceptCountSync());
-  statsLine.textContent = "";
-  statsLine.appendChild(document.createTextNode(parts.before));
-  const span = document.createElement("span");
-  span.className = "bcc-panel__stat-number";
-  span.textContent = parts.numberText;
-  statsLine.appendChild(span);
-  statsLine.appendChild(document.createTextNode(parts.after));
 }
 
 function updateComposeNotification(lang, warning) {
@@ -84,7 +137,12 @@ function signatureFromAssessment(assessment) {
   ].join("|");
 }
 
-async function refreshCheck(lang) {
+async function refreshCheck(lang, lm) {
+  if (!lm?.isProtectionActive()) {
+    console.log("[PROTECTION] taskpane refresh skipped — protection inactive");
+    return;
+  }
+
   const item = Office?.context?.mailbox?.item;
   if (!item || !item.to || !item.cc) {
     setStatus(TEXTS[lang].composeMissing, true);
@@ -96,7 +154,6 @@ async function refreshCheck(lang) {
   const warning = visibleCount > 1;
   const currentSignature = signatureFromAssessment(assessment);
 
-  renderStatsLine(lang);
   setStatus(warning ? TEXTS[lang].warning : TEXTS[lang].safe, warning);
   document.getElementById("details").textContent = assessment.hasLikelyGroup
     ? `${TEXTS[lang].details(visibleCount)} · ${TEXTS[lang].groupHint} · ${TEXTS[lang].groupSignals(
@@ -109,6 +166,25 @@ async function refreshCheck(lang) {
     updateComposeNotification(lang, warning);
     lastAssessmentSignature = currentSignature;
   }
+}
+
+function showProtectionInactivePanel(lang) {
+  const item = Office?.context?.mailbox?.item;
+  try {
+    if (item?.notificationMessages?.removeAsync) {
+      item.notificationMessages.removeAsync(NOTIFICATION_KEY);
+    }
+  } catch (_e) {
+    /* ignore */
+  }
+
+  const lead = document.getElementById("lead");
+  if (lead) {
+    lead.textContent = TEXTS[lang]?.protectionInactiveBody || TEXTS.en.protectionInactiveBody;
+  }
+  setStatus(TEXTS[lang]?.subscriptionInactive || TEXTS.en.subscriptionInactive, true);
+  document.getElementById("details").textContent = "";
+  document.getElementById("refreshBtn").disabled = true;
 }
 
 Office.onReady(() => {
@@ -124,19 +200,35 @@ Office.onReady(() => {
   const poweredByLink = document.getElementById("poweredByLink");
   if (poweredByLink) poweredByLink.textContent = i18n.poweredBy;
   document.getElementById("refreshBtn").addEventListener("click", () => {
-    refreshCheck(lang);
+    const lm = getLicenseManagerSafe();
+    refreshCheck(lang, lm);
   });
 
   if (typeof isMailboxRequirementSupported === "function" && !isMailboxRequirementSupported("1.12")) {
     setStatus(i18n.unsupported, true);
     document.getElementById("details").textContent = "";
-    const statsLine = document.getElementById("statsLine");
-    if (statsLine) statsLine.textContent = "";
     return;
   }
 
-  refreshCheck(lang);
-  setInterval(() => {
-    refreshCheck(lang);
-  }, CHECK_INTERVAL_MS);
+  (async () => {
+    const lm = getLicenseManagerSafe();
+    if (lm) {
+      await lm.resolveState();
+      setSubscriptionBanner(lang, lm);
+    } else {
+      setSubscriptionBanner(lang, null);
+    }
+
+    const effectiveLm = getLicenseManagerSafe();
+    if (!effectiveLm?.isProtectionActive()) {
+      showProtectionInactivePanel(lang);
+      return;
+    }
+
+    await refreshCheck(lang, effectiveLm);
+    setInterval(() => {
+      const m = getLicenseManagerSafe();
+      refreshCheck(lang, m);
+    }, CHECK_INTERVAL_MS);
+  })();
 });
