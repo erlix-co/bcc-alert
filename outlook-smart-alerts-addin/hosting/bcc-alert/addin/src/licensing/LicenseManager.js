@@ -133,6 +133,33 @@ class LicenseManager {
   }
 
   /**
+   * Subscription end timestamp from last successful resolution (ISO string), if any.
+   * @returns {string | null}
+   */
+  getExpiresAt() {
+    const e = this._resolved?.expiresAt;
+    return typeof e === "string" && e.trim() ? e.trim() : null;
+  }
+
+  /**
+   * Whole days until expiry for **display only** (Smart Alert text, task pane). Not used for
+   * enforcement. Uses `daysLeft` when the server sent it; otherwise approximates from `expiresAt`
+   * vs the local clock.
+   * @returns {number | null}
+   */
+  getDisplayDaysUntilExpiry() {
+    const fromDaysLeft = this.getDaysLeft();
+    if (fromDaysLeft !== null) return fromDaysLeft;
+    const exp = this.getExpiresAt();
+    if (!exp) return null;
+    const endMs = Date.parse(exp);
+    if (!Number.isFinite(endMs)) return null;
+    const diffMs = endMs - Date.now();
+    if (diffMs <= 0) return 0;
+    return Math.ceil(diffMs / 86400000);
+  }
+
+  /**
    * Reads and validates cache from localStorage.
    * @returns {{ status: string, expiresAt?: string, daysLeft?: number, cachedAt: number } | null}
    */

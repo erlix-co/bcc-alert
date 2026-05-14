@@ -35,4 +35,11 @@ copyDir("src", "src");
 copyDir("assets", "assets");
 copyDir("support", "support");
 
+const prodManifest = path.join(projectRoot, "manifest.production.xml");
+const destManifest = path.join(outputRoot, "manifest.xml");
+if (fs.existsSync(prodManifest)) {
+  fs.copyFileSync(prodManifest, destManifest);
+  process.stdout.write(`Copied production manifest to: ${destManifest}\n`);
+}
+
 process.stdout.write(`Hosting bundle generated at: ${outputRoot}\n`);

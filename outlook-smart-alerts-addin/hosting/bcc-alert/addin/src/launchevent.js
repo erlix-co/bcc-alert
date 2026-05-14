@@ -26,7 +26,53 @@ function getLicenseManagerSafe() {
   return null;
 }
 
-function buildSmartAlertErrorMessage(lang) {
+/**
+ * One line for the Smart Alert dialog: subscription validity / days left (display only).
+ * @param {string} lang
+ * @param {object | null} lm License manager instance, or null.
+ * @returns {string}
+ */
+function buildSubscriptionLineForBlockDialog(lang, lm) {
+  const isHe = lang === "he";
+  if (!lm) {
+    return isHe ? "מצב מנוי: לא זמין." : "Subscription: status unavailable.";
+  }
+
+  if (typeof lm.isExpired === "function" && lm.isExpired()) {
+    return isHe ? "מנוי: לא פעיל." : "Subscription: not active.";
+  }
+
+  const offline = typeof lm.isOfflineGrace === "function" && lm.isOfflineGrace();
+  const days =
+    typeof lm.getDisplayDaysUntilExpiry === "function" ? lm.getDisplayDaysUntilExpiry() : null;
+
+  if (typeof lm.isExpiringSoon === "function" && lm.isExpiringSoon()) {
+    const n = days !== null && days !== undefined ? days : "?";
+    return isHe
+      ? `מנוי: מתקרב לתפוגה — נשארו כ־${n} ימים.`
+      : `Subscription: expiring soon — ${n} day(s) remaining.`;
+  }
+
+  if (days !== null && days !== undefined) {
+    return isHe
+      ? `מנוי: תקף — נשארו כ־${days} ימים לתפוגה.`
+      : `Subscription: active — ${days} day(s) until expiry.`;
+  }
+
+  if (offline) {
+    return isHe
+      ? "מנוי: תקף (נתונים מהמטמון — יאומת מול השרת כשהרשת זמינה)."
+      : "Subscription: active (cached; will sync when the network is available).";
+  }
+
+  return isHe ? "מנוי: תקף." : "Subscription: active.";
+}
+
+/**
+ * @param {string} lang
+ * @param {object | null} lm License manager instance, or null.
+ */
+function buildSmartAlertErrorMessage(lang, lm) {
   const isHe = lang === "he";
   const lines = isHe
     ? [
@@ -41,6 +87,7 @@ function buildSmartAlertErrorMessage(lang) {
         "",
         "We recommend using Bcc to protect privacy."
       ];
+  lines.push("", buildSubscriptionLineForBlockDialog(lang, lm));
   lines.push("", isHe ? "מופעל על ידי erlix.net" : "Powered by erlix.net");
   return lines.join("\n");
 }
@@ -438,7 +485,7 @@ function onMessageSendHandler(event) {
           console.log("[PROTECTION] blocking send (policy)", { effectiveVisibleCount });
           safeComplete({
             allowEvent: false,
-            errorMessage: buildSmartAlertErrorMessage(getUserLanguage())
+            errorMessage: buildSmartAlertErrorMessage(getUserLanguage(), lm)
           });
           fireAndForget(() => reportDecisionMetric({ decision: "blocked", visibleCount: effectiveVisibleCount }));
           return;
@@ -472,6 +519,7 @@ if (typeof Office !== "undefined") {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
+    buildSubscriptionLineForBlockDialog,
     buildSmartAlertErrorMessage,
     getRecipientsAsync,
     countVisibleRecipients,
