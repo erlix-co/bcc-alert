@@ -66,7 +66,17 @@ This is **not** served by LinkCheck. It runs as a separate service:
 
 ### Nginx
 
-Include `licensing-api/deploy/nginx-license-status.snippet.conf` **before** any broad `location /api/` that proxies to LinkCheck, so only `/api/license-status` hits the licensing service.
+The snippet file alone is not enough — it must be **included** inside the active `erlix.net` HTTPS `server { }` block **before** `location ^~ /api/`.
+
+On the VPS (safe, with backup + `nginx -t`):
+
+```bash
+sudo bash /root/erlix/bcc-alert/licensing-api/deploy/nginx-activate-license-route.sh
+```
+
+Or run full deploy (also restarts licensing-api): `licensing-api/deploy/deploy.sh`
+
+Reference layout: `licensing-api/deploy/erlix.net.nginx.example.conf`
 
 ### Deploy (licensing only)
 

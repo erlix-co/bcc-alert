@@ -22,6 +22,14 @@ Standalone Flask service for **Outlook BCC Alert** subscription checks only.
 bash /root/erlix/bcc-alert/licensing-api/deploy/deploy.sh
 ```
 
+## Nginx (required once)
+
+```bash
+sudo bash /root/erlix/bcc-alert/licensing-api/deploy/nginx-activate-license-route.sh
+```
+
+This adds `include /etc/nginx/snippets/erlix-license-status.conf;` before the generic `location /api/` block.
+
 ```bash
 systemctl status licensing-api
 journalctl -u licensing-api -f

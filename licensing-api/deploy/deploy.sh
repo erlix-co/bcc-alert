@@ -63,19 +63,11 @@ else
   exit 1
 fi
 
-if command -v nginx >/dev/null 2>&1; then
-  SNIPPET_SRC="${LICENSE_ROOT}/deploy/nginx-license-status.snippet.conf"
-  SNIPPET_DST="/etc/nginx/snippets/erlix-license-status.conf"
-  if [[ -f "${SNIPPET_SRC}" ]]; then
-    cp -f "${SNIPPET_SRC}" "${SNIPPET_DST}"
-    if nginx -t; then
-      systemctl reload nginx
-      echo "[deploy] nginx reloaded (license-status -> 127.0.0.1:${LISTEN_PORT})"
-    else
-      echo "[deploy] ERROR: nginx -t failed; not reloading"
-      exit 1
-    fi
-  fi
+if command -v nginx >/dev/null 2>&1 && [[ -x "${LICENSE_ROOT}/deploy/nginx-activate-license-route.sh" ]]; then
+  echo "[deploy] activating nginx include for /api/license-status..."
+  bash "${LICENSE_ROOT}/deploy/nginx-activate-license-route.sh"
+elif command -v nginx >/dev/null 2>&1; then
+  echo "[deploy] WARNING: nginx-activate-license-route.sh missing — copy snippet and include manually"
 fi
 
 echo "[deploy] licensing-api completed at $(date -u +%FT%TZ)"
