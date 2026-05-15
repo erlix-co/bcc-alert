@@ -49,6 +49,38 @@ Do not route legacy public-site add-in paths to runtime content.
 5. Reload/restart NGINX if needed
 6. Restart Outlook clients (cache)
 
+## License API (`/api/license-status`)
+
+The Outlook add-in calls:
+
+- `GET https://erlix.net/api/license-status?email=<mailbox>`
+
+### Source
+
+- `backend/app.py` — minimal Flask app (temporary allowlist; no DB).
+
+### Deploy options
+
+**A — Same host as LinkCheck (fastest if nginx already proxies `/api/` to LinkCheck):**
+
+The route also exists in `LinkCheck/backend/app.py`. Deploy/restart LinkCheck backend after pulling that repo.
+
+**B — Dedicated service (this repo):**
+
+1. On the VPS, point the bcc-alert webhook at `deploy/deploy.sh` (or run it manually).
+2. Install nginx snippet `deploy/nginx-license-status.snippet.conf` so `/api/license-status` proxies to port `5002`.
+3. `systemctl status bcc-license-api` should be active.
+
+### Verify
+
+```text
+curl "https://erlix.net/api/license-status?email=ierlich@gmail.com"
+```
+
+Expect: `{"status":"active","expiresAt":"2026-12-31T00:00:00Z"}`
+
+After a successful response, the Outlook block dialog should show a real subscription line (days until expiry), not the cached/offline parenthetical.
+
 ## Verification Checklist
 
 - Open `https://erlix.net/bcc-alert-addin/addin/src/launchevent.js` in browser and verify latest code.

@@ -1,0 +1,16 @@
+[Unit]
+Description=BCC Alert license API (Flask)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/erlix/bcc-alert/backend
+Environment=PORT=5002
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/root/erlix/bcc-alert/backend/.venv/bin/python app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
