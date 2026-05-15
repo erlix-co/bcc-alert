@@ -79,4 +79,4 @@ if command -v nginx >/dev/null 2>&1; then
 fi
 
 echo "[deploy] licensing-api completed at $(date -u +%FT%TZ)"
-echo "[deploy] verify: curl -sS 'https://erlix.net/api/license-status?email=ierlich@gmail.com'"
+echo "[deploy] verify: curl -sS 'https://erlix.net/api/license-status?email=admin@erlix.onmicrosoft.com'"

@@ -85,7 +85,7 @@ bash /root/erlix/bcc-alert/deploy/deploy-addin.sh
 ### Verify
 
 ```text
-curl "https://erlix.net/api/license-status?email=ierlich@gmail.com"
+curl "https://erlix.net/api/license-status?email=admin@erlix.onmicrosoft.com"
 ```
 
 Expect: `{"status":"active","expiresAt":"2026-12-31T00:00:00Z"}`

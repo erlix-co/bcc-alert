@@ -32,7 +32,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("licensing_api")
 
-ACTIVE_EMAIL = (os.getenv("LICENSE_ACTIVE_EMAIL") or "ierlich@gmail.com").strip().lower()
+ACTIVE_EMAIL = (os.getenv("LICENSE_ACTIVE_EMAIL") or "admin@erlix.onmicrosoft.com").strip().lower()
 ACTIVE_EXPIRES_AT = os.getenv("LICENSE_ACTIVE_EXPIRES_AT") or "2026-12-31T00:00:00Z"
 
 app = Flask(__name__)
