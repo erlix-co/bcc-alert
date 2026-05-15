@@ -39,13 +39,24 @@ systemctl daemon-reload
 systemctl enable licensing-api
 systemctl restart licensing-api
 
+if curl -sf --max-time 5 "http://127.0.0.1:5003/health" >/dev/null; then
+  echo "[deploy] licensing-api health check OK (127.0.0.1:5003)"
+else
+  echo "[deploy] WARNING: licensing-api health check failed on port 5003 (service may still be starting)"
+fi
+
 if command -v nginx >/dev/null 2>&1; then
   SNIPPET_SRC="${LICENSE_ROOT}/deploy/nginx-license-status.snippet.conf"
   SNIPPET_DST="/etc/nginx/snippets/erlix-license-status.conf"
   if [[ -f "${SNIPPET_SRC}" ]]; then
     cp -f "${SNIPPET_SRC}" "${SNIPPET_DST}"
-    nginx -t
-    systemctl reload nginx
+    if nginx -t; then
+      systemctl reload nginx
+      echo "[deploy] nginx reloaded (license-status -> 127.0.0.1:5003)"
+    else
+      echo "[deploy] ERROR: nginx -t failed; not reloading (home-webhook and other sites untouched)"
+      exit 1
+    fi
   fi
 fi
 

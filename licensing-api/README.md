@@ -29,4 +29,4 @@ journalctl -u licensing-api -f
 
 ## Nginx
 
-Use `deploy/nginx-license-status.snippet.conf` so `/api/license-status` proxies to port **5002**, not LinkCheck.
+Use `deploy/nginx-license-status.snippet.conf` so `/api/license-status` proxies to port **5003** (do not use 5002 — reserved by `home-webhook` on this server).
