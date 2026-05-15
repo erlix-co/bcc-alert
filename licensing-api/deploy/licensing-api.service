@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/root/erlix/licensing-api
+# Must match config.LISTEN_PORT and nginx upstream (127.0.0.1:5003).
 Environment=PORT=5003
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/root/erlix/licensing-api/.venv/bin/python app.py

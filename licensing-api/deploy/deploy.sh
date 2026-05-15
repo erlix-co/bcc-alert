@@ -14,6 +14,7 @@ fi
 REPO_DIR="${LICENSING_REPO_DIR:-/root/erlix/bcc-alert}"
 LICENSE_ROOT="${LICENSING_API_ROOT:-/root/erlix/licensing-api}"
 BRANCH="${LICENSING_DEPLOY_BRANCH:-master}"
+LISTEN_PORT=5003
 
 echo "[deploy] licensing-api starting at $(date -u +%FT%TZ)"
 trap 'echo "[deploy] licensing-api failed at $(date -u +%FT%TZ)"' ERR
@@ -30,19 +31,36 @@ rsync -a --delete \
   --exclude "logs/*.log" \
   "${REPO_DIR}/licensing-api/" "${LICENSE_ROOT}/"
 
+for _check_file in app.py config.py deploy/licensing-api.service deploy/nginx-license-status.snippet.conf; do
+  if [[ -f "${LICENSE_ROOT}/${_check_file}" ]] && grep -q "5002" "${LICENSE_ROOT}/${_check_file}"; then
+    echo "[deploy] ERROR: forbidden port 5002 in ${LICENSE_ROOT}/${_check_file}"
+    exit 1
+  fi
+done
+
 cd "${LICENSE_ROOT}"
 python3 -m venv .venv
 .venv/bin/pip install -q -r requirements.txt
+
+# Retire legacy unit name from early migrations (does not touch home-webhook).
+systemctl disable --now bcc-license-api 2>/dev/null || true
+rm -f /etc/systemd/system/bcc-license-api.service
+
+# Remove stale systemd drop-ins that might override PORT.
+rm -rf /etc/systemd/system/licensing-api.service.d
 
 cp -f "${LICENSE_ROOT}/deploy/licensing-api.service" /etc/systemd/system/licensing-api.service
 systemctl daemon-reload
 systemctl enable licensing-api
 systemctl restart licensing-api
 
-if curl -sf --max-time 5 "http://127.0.0.1:5003/health" >/dev/null; then
-  echo "[deploy] licensing-api health check OK (127.0.0.1:5003)"
+sleep 1
+if curl -sf --max-time 5 "http://127.0.0.1:${LISTEN_PORT}/health" >/dev/null; then
+  echo "[deploy] licensing-api health check OK (127.0.0.1:${LISTEN_PORT})"
 else
-  echo "[deploy] WARNING: licensing-api health check failed on port 5003 (service may still be starting)"
+  echo "[deploy] ERROR: health check failed on 127.0.0.1:${LISTEN_PORT}"
+  journalctl -u licensing-api -n 30 --no-pager || true
+  exit 1
 fi
 
 if command -v nginx >/dev/null 2>&1; then
@@ -52,9 +70,9 @@ if command -v nginx >/dev/null 2>&1; then
     cp -f "${SNIPPET_SRC}" "${SNIPPET_DST}"
     if nginx -t; then
       systemctl reload nginx
-      echo "[deploy] nginx reloaded (license-status -> 127.0.0.1:5003)"
+      echo "[deploy] nginx reloaded (license-status -> 127.0.0.1:${LISTEN_PORT})"
     else
-      echo "[deploy] ERROR: nginx -t failed; not reloading (home-webhook and other sites untouched)"
+      echo "[deploy] ERROR: nginx -t failed; not reloading"
       exit 1
     fi
   fi

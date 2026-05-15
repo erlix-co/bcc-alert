@@ -17,6 +17,8 @@ from pathlib import Path
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+from config import LISTEN_PORT
+
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -35,6 +37,29 @@ ACTIVE_EXPIRES_AT = os.getenv("LICENSE_ACTIVE_EXPIRES_AT") or "2026-12-31T00:00:
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+
+def resolve_listen_port() -> int:
+    """
+    Always bind to LISTEN_PORT (5003) unless PORT env is set to the same value.
+    Ignores stale PORT values from old deployments.
+    """
+    raw = (os.getenv("PORT") or "").strip()
+    if not raw:
+        return LISTEN_PORT
+    try:
+        port = int(raw)
+    except ValueError:
+        log.warning("[LICENSE_API] invalid PORT=%r — using %s", raw, LISTEN_PORT)
+        return LISTEN_PORT
+    if port != LISTEN_PORT:
+        log.warning(
+            "[LICENSE_API] PORT=%s ignored — licensing-api must listen on %s (update systemd/nginx)",
+            port,
+            LISTEN_PORT,
+        )
+        return LISTEN_PORT
+    return port
 
 
 def _license_payload_for_email(email: str) -> dict:
@@ -64,9 +89,10 @@ def license_status():
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True, "service": "licensing-api"})
+    return jsonify({"ok": True, "service": "licensing-api", "port": LISTEN_PORT})
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "5003"))
+    port = resolve_listen_port()
+    log.info("[LICENSE_API] starting Flask on 0.0.0.0:%s", port)
     app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG", "").lower() == "true")

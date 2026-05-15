@@ -61,7 +61,7 @@ This is **not** served by LinkCheck. It runs as a separate service:
 |------|--------|
 | Source in repo | `licensing-api/` |
 | Server runtime | `/root/erlix/licensing-api` |
-| systemd unit | `licensing-api.service` (port **5003**; not 5002 — used by `home-webhook`) |
+| systemd unit | `licensing-api.service` (port **5003**, see `licensing-api/config.py`) |
 | Deploy script | `licensing-api/deploy/deploy.sh` |
 
 ### Nginx
