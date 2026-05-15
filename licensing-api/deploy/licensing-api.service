@@ -1,0 +1,18 @@
+[Unit]
+Description=Erlix Outlook add-in licensing API (Flask)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/erlix/licensing-api
+Environment=PORT=5002
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/root/erlix/licensing-api/.venv/bin/python app.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

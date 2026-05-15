@@ -49,27 +49,38 @@ Do not route legacy public-site add-in paths to runtime content.
 5. Reload/restart NGINX if needed
 6. Restart Outlook clients (cache)
 
-## License API (`/api/license-status`)
+## License API (`/api/license-status`) — standalone service
 
 The Outlook add-in calls:
 
 - `GET https://erlix.net/api/license-status?email=<mailbox>`
 
-### Source
+This is **not** served by LinkCheck. It runs as a separate service:
 
-- `backend/app.py` — minimal Flask app (temporary allowlist; no DB).
+| Item | Value |
+|------|--------|
+| Source in repo | `licensing-api/` |
+| Server runtime | `/root/erlix/licensing-api` |
+| systemd unit | `licensing-api.service` (port **5002**) |
+| Deploy script | `licensing-api/deploy/deploy.sh` |
 
-### Deploy options
+### Nginx
 
-**A — Same host as LinkCheck (fastest if nginx already proxies `/api/` to LinkCheck):**
+Include `licensing-api/deploy/nginx-license-status.snippet.conf` **before** any broad `location /api/` that proxies to LinkCheck, so only `/api/license-status` hits the licensing service.
 
-The route also exists in `LinkCheck/backend/app.py`. Deploy/restart LinkCheck backend after pulling that repo.
+### Deploy (licensing only)
 
-**B — Dedicated service (this repo):**
+```bash
+bash /root/erlix/bcc-alert/licensing-api/deploy/deploy.sh
+systemctl status licensing-api
+journalctl -u licensing-api -f
+```
 
-1. On the VPS, point the bcc-alert webhook at `deploy/deploy.sh` (or run it manually).
-2. Install nginx snippet `deploy/nginx-license-status.snippet.conf` so `/api/license-status` proxies to port `5002`.
-3. `systemctl status bcc-license-api` should be active.
+### Deploy (add-in static files only)
+
+```bash
+bash /root/erlix/bcc-alert/deploy/deploy-addin.sh
+```
 
 ### Verify
 
