@@ -64,6 +64,96 @@
     return out;
   }
 
+  function isToOrCcFieldLabel(label) {
+    const s = String(label || "").trim();
+    if (!s) return false;
+    if (/\b(bcc|עותק מוסתר)\b/i.test(s)) return false;
+    if (/^\s*(to|cc)\b/i.test(s)) return true;
+    if (/^\s*(אל|עותק)\b/.test(s)) return true;
+    if (/^\s*(נמענים|נמען)\b/.test(s)) return true;
+    return false;
+  }
+
+  function recipientFieldRow(el) {
+    if (!(el instanceof Element)) return null;
+    return (
+      el.closest("tr") ||
+      el.closest("[data-recipient-context]") ||
+      el.closest("div[role='list']")?.parentElement ||
+      el.parentElement?.parentElement ||
+      el
+    );
+  }
+
+  /** To/Cc input rows only — avoids counting thread hovercards in plain Reply. */
+  function findComposeRecipientRoots(dialog) {
+    const roots = new Set();
+    const add = (el) => {
+      const row = recipientFieldRow(el);
+      if (row && dialog.contains(row)) roots.add(row);
+    };
+
+    dialog.querySelectorAll('[name="to"], [name="cc"]').forEach(add);
+
+    dialog.querySelectorAll('[role="textbox"]').forEach((tb) => {
+      if (isToOrCcFieldLabel(tb.getAttribute("aria-label"))) add(tb);
+    });
+
+    dialog.querySelectorAll("[aria-label]").forEach((node) => {
+      const aria = node.getAttribute("aria-label");
+      if (!isToOrCcFieldLabel(aria)) return;
+      if (node.matches?.('[role="textbox"], [name="to"], [name="cc"], input')) add(node);
+    });
+
+    return Array.from(roots);
+  }
+
+  function collectVisibleChipsInScope(scope) {
+    const seen = new Set();
+    const chips = [];
+    const addKey = (key, el) => {
+      const k = String(key || "").trim().toLowerCase();
+      if (!k) return;
+      if (seen.has(k)) return;
+      seen.add(k);
+      chips.push(el);
+    };
+
+    const selectors = [
+      "span[email][data-hovercard-id]",
+      "[email][data-hovercard-id]",
+      "span[email]",
+      "[data-hovercard-id]"
+    ];
+    for (const sel of selectors) {
+      for (const el of scope.querySelectorAll(sel)) {
+        if (!isChipUiVisible(el) || isBccChip(el)) continue;
+        addKey(el.getAttribute?.("email") || el.getAttribute?.("data-hovercard-id"), el);
+      }
+    }
+
+    for (const a of scope.querySelectorAll('a[href^="mailto:"]')) {
+      if (!isChipUiVisible(a) || isBccChip(a)) continue;
+      const href = String(a.getAttribute("href") || "");
+      const email = href.replace(/^mailto:/i, "").split("?")[0].trim();
+      addKey(email, a);
+    }
+
+    return chips;
+  }
+
+  function countChipsInRecipientFields(dialog) {
+    const roots = findComposeRecipientRoots(dialog);
+    if (roots.length === 0) return null;
+
+    const chips = uniqChipsByRecipientKey(
+      roots.flatMap((root) => collectVisibleChipsInScope(root))
+    );
+    const visible = chips.filter((el) => !isBccChip(el));
+    const bccOnly = chips.length - visible.length;
+    return { toCc: visible.length, bcc: bccOnly };
+  }
+
   function isBccChip(el) {
     let current = el;
     for (let i = 0; i < 12 && current; i++) {
@@ -86,6 +176,14 @@
   }
 
   function countChips(dialog) {
+    // Reply-all: multiple visible addresses live in To/Cc rows; a whole-compose scan can
+    // return 1 chip while Cc (or alternate chip markup) holds the rest.
+    const fieldScoped = countChipsInRecipientFields(dialog);
+    if (fieldScoped && fieldScoped.toCc > 0) {
+      dlog("field-scoped count", fieldScoped);
+      return fieldScoped;
+    }
+
     // Keep base selector behavior (proven stable in user's environment)
     const all = uniqChipsByRecipientKey(
       Array.from(dialog.querySelectorAll("span[email][data-hovercard-id]")).filter(isChipUiVisible)
@@ -306,7 +404,7 @@
     const { toCc, bcc } = countChips(dialog);
     dlog("Final smart count", { toCc, bcc });
 
-    if (toCc > 1 && bcc === 0) {
+    if (toCc > 1) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
