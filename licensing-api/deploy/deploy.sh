@@ -29,7 +29,14 @@ mkdir -p "${LICENSE_ROOT}"
 rsync -a --delete \
   --exclude ".venv" \
   --exclude "logs/*.log" \
+  --exclude "data/active_users.txt" \
   "${REPO_DIR}/licensing-api/" "${LICENSE_ROOT}/"
+
+mkdir -p "${LICENSE_ROOT}/data"
+if [[ ! -f "${LICENSE_ROOT}/data/active_users.txt" ]]; then
+  cp -f "${REPO_DIR}/licensing-api/data/active_users.txt" "${LICENSE_ROOT}/data/active_users.txt"
+  echo "[deploy] seeded ${LICENSE_ROOT}/data/active_users.txt"
+fi
 
 for _check_file in app.py config.py deploy/licensing-api.service deploy/nginx-license-status.snippet.conf; do
   if [[ -f "${LICENSE_ROOT}/${_check_file}" ]] && grep -q "5002" "${LICENSE_ROOT}/${_check_file}"; then

@@ -5,6 +5,8 @@ Standalone service — no coupling to LinkCheck or other Erlix products.
 
 Public URL (nginx): GET https://erlix.net/api/license-status?email=...
 Internal route:      GET /license-status?email=...
+
+Active customers: data/active_users.txt (one email per line).
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from config import LISTEN_PORT
+from user_store import ACTIVE_USERS_FILE, is_active_email
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -32,7 +35,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("licensing_api")
 
-ACTIVE_EMAIL = (os.getenv("LICENSE_ACTIVE_EMAIL") or "admin@erlix.onmicrosoft.com").strip().lower()
+# Shared expiry for all manually activated users until per-user dates exist.
 ACTIVE_EXPIRES_AT = os.getenv("LICENSE_ACTIVE_EXPIRES_AT") or "2026-12-31T00:00:00Z"
 
 app = Flask(__name__)
@@ -65,14 +68,14 @@ def resolve_listen_port() -> int:
 def _license_payload_for_email(email: str) -> dict:
     normalized = email.strip().lower()
     if not normalized:
-        log.info("[LICENSE_API] missing or empty email -> expired")
+        log.info("[LICENSE_API] invalid request (missing email) -> expired")
         return {"status": "expired"}
 
-    if normalized == ACTIVE_EMAIL:
-        log.info("[LICENSE_API] active for %s", normalized)
+    if is_active_email(normalized):
+        log.info("[LICENSE_API] active user: %s", normalized)
         return {"status": "active", "expiresAt": ACTIVE_EXPIRES_AT}
 
-    log.info("[LICENSE_API] expired for %s", normalized)
+    log.info("[LICENSE_API] expired user: %s", normalized)
     return {"status": "expired"}
 
 
@@ -89,10 +92,17 @@ def license_status():
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True, "service": "licensing-api", "port": LISTEN_PORT})
+    return jsonify(
+        {
+            "ok": True,
+            "service": "licensing-api",
+            "port": LISTEN_PORT,
+            "activeUsersFile": str(ACTIVE_USERS_FILE),
+        }
+    )
 
 
 if __name__ == "__main__":
     port = resolve_listen_port()
-    log.info("[LICENSE_API] starting Flask on 0.0.0.0:%s", port)
+    log.info("[LICENSE_API] starting Flask on 0.0.0.0:%s (users file: %s)", port, ACTIVE_USERS_FILE)
     app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG", "").lower() == "true")

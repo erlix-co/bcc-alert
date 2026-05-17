@@ -1,0 +1,2 @@
+# One email per line (lowercase comparison). Lines starting with # are ignored.
+admin@erlix.onmicrosoft.com

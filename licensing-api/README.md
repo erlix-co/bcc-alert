@@ -9,6 +9,18 @@ Standalone Flask service for **Outlook BCC Alert** subscription checks only.
 
 `GET /license-status?email=` (public: `https://erlix.net/api/license-status?email=`)
 
+## Manual activation (no Stripe / DB yet)
+
+Edit on the server (one email per line):
+
+`/root/erlix/licensing-api/data/active_users.txt`
+
+Changes apply on the next request (file is re-read when modified; no restart required).
+
+```bash
+echo "customer@example.com" >> /root/erlix/licensing-api/data/active_users.txt
+```
+
 ## Server layout
 
 | Path | Role |

@@ -61,6 +61,7 @@ This is **not** served by LinkCheck. It runs as a separate service:
 |------|--------|
 | Source in repo | `licensing-api/` |
 | Server runtime | `/root/erlix/licensing-api` |
+| Active customers | `/root/erlix/licensing-api/data/active_users.txt` (one email per line) |
 | systemd unit | `licensing-api.service` (port **5003**, see `licensing-api/config.py`) |
 | Deploy script | `licensing-api/deploy/deploy.sh` |
 
