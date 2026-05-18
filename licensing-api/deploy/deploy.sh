@@ -30,6 +30,9 @@ rsync -a --delete \
   --exclude ".venv" \
   --exclude "logs/*.log" \
   --exclude "data/active_users.txt" \
+  --exclude "data/licenses.db" \
+  --exclude "data/licenses.db-wal" \
+  --exclude "data/licenses.db-shm" \
   "${REPO_DIR}/licensing-api/" "${LICENSE_ROOT}/"
 
 mkdir -p "${LICENSE_ROOT}/data"

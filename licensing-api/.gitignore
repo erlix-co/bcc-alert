@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 logs/*.log
 !logs/.gitkeep
+data/licenses.db
+data/licenses.db-wal
+data/licenses.db-shm
